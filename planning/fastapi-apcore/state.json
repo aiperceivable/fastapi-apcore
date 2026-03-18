@@ -1,0 +1,22 @@
+{
+  "feature": "fastapi-apcore-full-implementation",
+  "status": "completed",
+  "plan_file": "planning/fastapi-apcore/plan.md",
+  "tasks": {
+    "001": { "name": "ApcoreSettings config system", "status": "completed", "file": "src/fastapi_apcore/config.py" },
+    "002": { "name": "FastAPIContextFactory", "status": "completed", "file": "src/fastapi_apcore/context.py" },
+    "003": { "name": "Registry/Executor singletons", "status": "completed", "file": "src/fastapi_apcore/registry.py" },
+    "004": { "name": "Extension system", "status": "completed", "file": "src/fastapi_apcore/extensions.py" },
+    "005": { "name": "Observability auto-setup", "status": "completed", "file": "src/fastapi_apcore/observability.py" },
+    "006": { "name": "Output writers", "status": "completed", "file": "src/fastapi_apcore/output/" },
+    "007": { "name": "Shortcuts", "status": "completed", "file": "src/fastapi_apcore/shortcuts.py" },
+    "008": { "name": "Task management", "status": "completed", "file": "src/fastapi_apcore/tasks.py" },
+    "009": { "name": "FastAPIApcore client", "status": "completed", "file": "src/fastapi_apcore/client.py" },
+    "010": { "name": "CLI commands", "status": "completed", "file": "src/fastapi_apcore/cli.py" },
+    "011": { "name": "Serializers", "status": "completed", "file": "src/fastapi_apcore/serializers.py" },
+    "012": { "name": "Complete exports", "status": "completed", "file": "src/fastapi_apcore/__init__.py" },
+    "013": { "name": "pyproject.toml updates", "status": "completed", "file": "pyproject.toml" },
+    "014": { "name": "Integration tests", "status": "completed", "file": "tests/" }
+  },
+  "current_task": null
+}

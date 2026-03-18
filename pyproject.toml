@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastapi-apcore"
+version = "0.1.0"
+description = "FastAPI integration for apcore AI-Perceivable Core — exposes FastAPI routes as apcore modules with auto-discovery, schema extraction from Pydantic models, and OpenAPI-based scanning."
+requires-python = ">=3.11"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    { name = "aipartnerup", email = "tercel.yi@gmail.com" },
+]
+keywords = [
+    "fastapi",
+    "apcore",
+    "mcp",
+    "llm",
+    "ai",
+    "tools",
+    "pydantic",
+    "schema",
+    "module",
+    "cli",
+    "auto-discovery",
+    "integration",
+]
+dependencies = [
+    "fastapi>=0.100",
+    "apcore>=0.13.0",
+    "apcore-toolkit>=0.2.0",
+]
+
+[project.optional-dependencies]
+mcp = ["apcore-mcp>=0.10.0"]
+cli = ["apcore-cli>=0.2.0", "typer>=0.9"]
+all = ["fastapi-apcore[mcp,cli]"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "httpx>=0.24",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "coverage>=7.0",
+]
+
+[project.scripts]
+fastapi-apcore = "fastapi_apcore.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.apdev]
+base_package = "fastapi_apcore"
+
+[tool.ruff]
+src = ["src"]
+target-version = "py311"
+line-length = 120
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[project.urls]
+Homepage = "https://github.com/aipartnerup/"
+Repository = "https://github.com/aipartnerup/fastapi-apcore"
