@@ -37,6 +37,7 @@ mcp = ["apcore-mcp>=0.10.0"]
 cli = ["apcore-cli>=0.2.0", "typer>=0.9"]
 all = ["fastapi-apcore[mcp,cli]"]
 dev = [
+    "apdev[dev]>=0.2.3",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "httpx>=0.24",
