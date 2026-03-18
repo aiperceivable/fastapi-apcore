@@ -8,6 +8,7 @@ FastAPI integration for [apcore](https://github.com/aipartnerup/apcore-python) (
 - **Annotation inference** -- `GET` -> readonly+cacheable, `DELETE` -> destructive, `PUT` -> idempotent
 - **Pydantic schema extraction** -- input/output schemas extracted from Pydantic models and OpenAPI spec
 - **Two scanner backends** -- OpenAPI-based (accurate) and native route inspection (fast)
+- **Simplified module IDs** -- `simplify_ids=True` extracts clean function names from FastAPI operationIds
 - **`@module` decorator** -- define standalone AI-callable modules with full schema enforcement
 - **YAML binding** -- zero-code module definitions via external `.binding.yaml` files
 - **MCP server** -- stdio, streamable-http, and SSE transports via `fastapi-apcore serve`
@@ -380,14 +381,21 @@ Two scanner backends are available:
 ```python
 from fastapi_apcore import get_scanner
 
-# OpenAPI scanner (default)
+# OpenAPI scanner (default) -- full operationId-based IDs
 scanner = get_scanner("openapi")
 modules = scanner.scan(app)
+
+# OpenAPI scanner with simplified IDs (recommended for CLI)
+scanner = get_scanner("openapi", simplify_ids=True)
+modules = scanner.scan(app)
+# product.get_product_product__product_id_.get → product.get_product.get
 
 # Native scanner
 scanner = get_scanner("native")
 modules = scanner.scan(app, include=r"users\.", exclude=r"\.delete$")
 ```
+
+The `simplify_ids` option extracts the original Python function name from FastAPI's auto-generated operationId, producing much shorter and more readable module IDs. It defaults to `False` for backward compatibility.
 
 ## Project Structure
 

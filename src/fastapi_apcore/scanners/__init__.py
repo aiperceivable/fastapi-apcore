@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi_apcore.scanners.native import NativeFastAPIScanner
 from fastapi_apcore.scanners.openapi import OpenAPIScanner
@@ -16,12 +16,14 @@ _SCANNER_REGISTRY: dict[str, type[BaseScanner]] = {
 }
 
 
-def get_scanner(source: str = "openapi") -> BaseScanner:
+def get_scanner(source: str = "openapi", **kwargs: Any) -> BaseScanner:
     """Instantiate a scanner by source name.
 
     Args:
         source: Scanner type — 'native' for route inspection,
                 'openapi' for OpenAPI schema-based scanning (default).
+        **kwargs: Passed to the scanner constructor.
+                  For 'openapi': ``simplify_ids=True`` generates simplified IDs.
 
     Returns:
         A BaseScanner subclass instance.
@@ -33,4 +35,4 @@ def get_scanner(source: str = "openapi") -> BaseScanner:
     if scanner_cls is None:
         valid = ", ".join(sorted(_SCANNER_REGISTRY))
         raise ValueError(f"Unknown scanner source '{source}'. Valid sources: {valid}")
-    return scanner_cls()
+    return scanner_cls(**kwargs)

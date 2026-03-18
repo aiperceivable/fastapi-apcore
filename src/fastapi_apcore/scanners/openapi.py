@@ -4,7 +4,9 @@ Scans FastAPI routes via the auto-generated OpenAPI schema.
 This is the most accurate scanner since FastAPI's OpenAPI generation
 handles all edge cases (Depends, File, Form, etc.).
 
-Module ID format: {tag}.{operation_id}.{method}
+Module ID format:
+  Default:        {tag}.{operationId_without_method}.{method}
+  simplify_ids:   {tag}.{func_name}.{method}
 """
 
 from __future__ import annotations
@@ -33,6 +35,17 @@ class OpenAPIScanner(BaseScanner):
     - Complex Pydantic model nesting
     - Response models with $ref
     """
+
+    def __init__(self, *, simplify_ids: bool = False) -> None:
+        """Initialize the OpenAPI scanner.
+
+        Args:
+            simplify_ids: When True, generate simplified module IDs using only
+                the function name (e.g. ``product.get_product.get``).
+                When False (default), use the full FastAPI operationId
+                (e.g. ``product.get_product_product__product_id_.get``).
+        """
+        self._simplify_ids = simplify_ids
 
     def scan(
         self,
@@ -108,39 +121,72 @@ class OpenAPIScanner(BaseScanner):
         return "openapi-fastapi"
 
     def _generate_module_id(self, operation: dict[str, Any], path: str, method: str) -> str:
-        """Generate module_id from tags + operation_id + method.
+        """Generate module_id from tags + function_name + method.
 
-        Format: {tag}.{operation_id}.{method}
-        Falls back to path-based ID if no tags.
+        When ``simplify_ids=True`` (set in constructor), extracts the clean
+        function name from FastAPI's operationId::
+
+            GET /product/{product_id}  → product.get_product.get
+            POST /task/create          → task.create_task.post
+
+        When ``simplify_ids=False`` (default), uses the raw operationId
+        with only the trailing method stripped::
+
+            GET /product/{product_id}  → product.get_product_product__product_id_.get
         """
         operation_id: str = operation.get("operationId", "unknown")
         tags = operation.get("tags", [])
 
-        # Clean operation_id: FastAPI generates e.g. "create_task_task_create_post"
-        # We use the simpler function name portion
-        func_name = self._simplify_operation_id(operation_id)
+        if self._simplify_ids:
+            func_name = self._extract_func_name(operation_id, path, method)
+        else:
+            func_name = self._strip_method_suffix(operation_id, method)
 
         if tags:
             prefix = str(tags[0]).lower().replace(" ", "_")
-            module_id = f"{prefix}.{func_name}.{method.lower()}"
         else:
             path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
             prefix = ".".join(path_parts) if path_parts else "root"
-            module_id = f"{prefix}.{func_name}.{method.lower()}"
 
+        module_id = f"{prefix}.{func_name}.{method.lower()}"
         return re.sub(r"[^a-zA-Z0-9._]", "_", module_id)
 
-    def _simplify_operation_id(self, operation_id: str) -> str:
-        """Simplify FastAPI's auto-generated operation IDs.
+    @staticmethod
+    def _strip_method_suffix(operation_id: str, method: str) -> str:
+        """Strip the trailing ``_{method}`` from an operationId.
 
-        FastAPI generates IDs like 'create_task_task_create_post'.
-        We strip the trailing path+method suffix to get the function name.
+        This is the default (non-short) simplification — removes only the
+        HTTP method suffix while preserving the full path information.
         """
-        # FastAPI pattern: {func_name}_{path_part}_{path_part}_{method}
-        # Try to extract just the function name by removing the suffix
-        parts = operation_id.rsplit("_", 1)
-        if len(parts) == 2 and parts[1] in ("get", "post", "put", "delete", "patch"):
-            return parts[0]
+        suffix = f"_{method.lower()}"
+        if operation_id.endswith(suffix):
+            return operation_id[: -len(suffix)]
+        return operation_id
+
+    @staticmethod
+    def _extract_func_name(operation_id: str, path: str, method: str) -> str:
+        """Extract the original function name from a FastAPI operationId.
+
+        FastAPI generates operationId as::
+
+            re.sub(r"\\W", "_", f"{func_name}{path}") + "_{method}"
+
+        This method reverses that transformation to recover ``func_name``.
+        """
+        method_lower = method.lower()
+
+        # Reconstruct the path suffix exactly as FastAPI generates it:
+        # every non-word character (\W) in the path becomes "_"
+        path_suffix = re.sub(r"\W", "_", path)
+        expected_suffix = f"{path_suffix}_{method_lower}"
+
+        if operation_id.endswith(expected_suffix):
+            return operation_id[: -len(expected_suffix)].rstrip("_")
+
+        # Fallback: strip trailing _{method}
+        if operation_id.endswith(f"_{method_lower}"):
+            return operation_id[: -(len(method_lower) + 1)]
+
         return operation_id
 
     def _build_view_map(self, app: FastAPI) -> dict[str, str]:

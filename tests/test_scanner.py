@@ -215,6 +215,59 @@ class TestOpenAPIScanner:
             assert "operation_id" in m.metadata
 
 
+# -- OpenAPIScanner simplify_ids --------------------------------------------
+
+
+class TestOpenAPIScannerSimplifyIds:
+    def test_simplified_ids_are_shorter(self, app: FastAPI) -> None:
+        default = OpenAPIScanner()
+        simplified = OpenAPIScanner(simplify_ids=True)
+
+        default_modules = default.scan(app)
+        simplified_modules = simplified.scan(app)
+
+        assert len(default_modules) == len(simplified_modules)
+        for d, s in zip(default_modules, simplified_modules):
+            assert len(s.module_id) <= len(d.module_id)
+
+    def test_simplified_ids_use_func_name(self, app: FastAPI) -> None:
+        scanner = OpenAPIScanner(simplify_ids=True)
+        modules = scanner.scan(app)
+        ids = {m.module_id for m in modules}
+
+        # Should contain clean function-name based IDs
+        assert "items.list_items.get" in ids
+        assert "items.create_item.post" in ids
+        assert "items.get_item.get" in ids
+        assert "items.delete_item.delete" in ids
+
+    def test_default_ids_contain_path_info(self, app: FastAPI) -> None:
+        scanner = OpenAPIScanner(simplify_ids=False)
+        modules = scanner.scan(app)
+        ids = {m.module_id for m in modules}
+
+        # Default IDs should contain path fragments (longer)
+        get_detail = next(mid for mid in ids if "get_item" in mid and mid.endswith(".get"))
+        assert "item_id" in get_detail  # path param info preserved
+
+    def test_simplify_ids_no_duplicates(self, app: FastAPI) -> None:
+        scanner = OpenAPIScanner(simplify_ids=True)
+        modules = scanner.scan(app)
+        ids = [m.module_id for m in modules]
+
+        assert len(ids) == len(set(ids)), f"Duplicate IDs found: {ids}"
+
+    def test_factory_passes_simplify_ids(self, app: FastAPI) -> None:
+        from fastapi_apcore.scanners import get_scanner
+
+        scanner = get_scanner("openapi", simplify_ids=True)
+        modules = scanner.scan(app)
+
+        # Verify simplified IDs (no path fragments like __item_id__)
+        for m in modules:
+            assert "__" not in m.module_id, f"Unsimplified ID: {m.module_id}"
+
+
 # -- get_scanner factory -----------------------------------------------------
 
 

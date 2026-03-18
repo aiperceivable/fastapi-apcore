@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-03-18
+
+### Added
+- **`simplify_ids` option for `OpenAPIScanner`** -- when enabled, generates clean module IDs using only the function name instead of the full FastAPI operationId. For example, `product.get_product_product__product_id_.get` becomes `product.get_product.get`. Defaults to `False` for backward compatibility.
+- **`_extract_func_name()` static method** -- reverses FastAPI's `generate_unique_id()` transformation to recover the original Python function name from an operationId. Handles path parameters, nested paths, and hyphens correctly.
+- **`_strip_method_suffix()` static method** -- minimal default simplification that removes only the trailing `_{method}` from operationIds.
+- **`get_scanner()` now accepts `**kwargs`** -- keyword arguments are forwarded to the scanner constructor, enabling `get_scanner("openapi", simplify_ids=True)`.
+- **5 new tests** for `simplify_ids` behavior -- covers shortened IDs, function name extraction, no duplicates, default mode preserving path info, and factory kwarg passthrough.
+
+### Changed
+- `_generate_module_id()` refactored -- uses `_extract_func_name()` when `simplify_ids=True`, or `_strip_method_suffix()` when `False`. Extracted common prefix logic to reduce duplication.
+- Module docstring in `openapi.py` updated to document both ID generation modes.
+
 ## [0.1.0] - 2026-03-18
 
 ### Added
