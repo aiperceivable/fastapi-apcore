@@ -47,8 +47,10 @@ class TestPublicAPI:
             ModuleExample,
             CancelToken,
             PreflightResult,
+            ExecutionCancelledError,
             ModuleError,
             ModuleNotFoundError,
+            ModuleDisabledError,
         )
 
         # All should be importable
@@ -66,8 +68,10 @@ class TestPublicAPI:
                 ModuleExample,
                 CancelToken,
                 PreflightResult,
+                ExecutionCancelledError,
                 ModuleError,
                 ModuleNotFoundError,
+                ModuleDisabledError,
             ]
         )
 
@@ -75,3 +79,16 @@ class TestPublicAPI:
         from fastapi_apcore import module
 
         assert callable(module)
+
+    def test_http_proxy_writer_lazy_export(self) -> None:
+        from fastapi_apcore import HTTPProxyRegistryWriter
+
+        assert HTTPProxyRegistryWriter is not None
+
+    def test_lazy_getattr_unknown_raises(self) -> None:
+        import pytest
+
+        import fastapi_apcore
+
+        with pytest.raises(AttributeError):
+            _ = fastapi_apcore.NoSuchThing  # type: ignore[attr-defined]

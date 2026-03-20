@@ -23,6 +23,18 @@ class TestGetWriter:
         writer = get_writer("yaml")
         assert isinstance(writer, YAMLWriter)
 
+    def test_get_writer_http_proxy_returns_http_proxy_writer(self) -> None:
+        """Passing 'http-proxy' should return an HTTPProxyRegistryWriter."""
+        from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
+
+        writer = get_writer("http-proxy", base_url="http://localhost:8000")
+        assert isinstance(writer, HTTPProxyRegistryWriter)
+
+    def test_get_writer_unknown_raises(self) -> None:
+        """Unknown format should raise ValueError."""
+        with pytest.raises(ValueError, match="Unknown output format"):
+            get_writer("nonexistent")
+
 
 class TestSchemaTopydantic:
     """Tests for _schema_to_pydantic helper."""

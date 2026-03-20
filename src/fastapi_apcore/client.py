@@ -68,6 +68,7 @@ class FastAPIApcore:
         *,
         scan: bool = True,
         scan_source: str = "openapi",
+        simplify_ids: bool = False,
         include: str | None = None,
         exclude: str | None = None,
     ) -> None:
@@ -82,6 +83,7 @@ class FastAPIApcore:
             scan: Whether to auto-scan FastAPI routes and register them
                 as apcore modules.  Defaults to True.
             scan_source: Scanner backend to use ('openapi' or 'native').
+            simplify_ids: Use simplified module IDs (function names only).
             include: Regex pattern — only register matching module IDs.
             exclude: Regex pattern — skip matching module IDs.
         """
@@ -112,7 +114,7 @@ class FastAPIApcore:
         if scan:
             from fastapi_apcore.output import get_writer
 
-            scanned = self.scan(app, source=scan_source, include=include, exclude=exclude)
+            scanned = self.scan(app, source=scan_source, simplify_ids=simplify_ids, include=include, exclude=exclude)
             if scanned:
                 writer = get_writer(None)  # RegistryWriter
                 writer.write(scanned, registry)
@@ -120,10 +122,9 @@ class FastAPIApcore:
 
         # 3. Hot-reload
         if settings.hot_reload:
-            watch_paths = settings.hot_reload_paths or [settings.module_dir]
             try:
-                registry.watch(paths=watch_paths)
-                logger.info("Hot-reload enabled for %s", watch_paths)
+                registry.watch()
+                logger.info("Hot-reload enabled")
             except Exception:
                 logger.warning("Hot-reload not available", exc_info=True)
 
@@ -358,13 +359,14 @@ class FastAPIApcore:
         app: FastAPI,
         source: str = "openapi",
         *,
+        simplify_ids: bool = False,
         include: str | None = None,
         exclude: str | None = None,
     ) -> list[Any]:
         """Scan FastAPI endpoints and return ScannedModule instances."""
         from fastapi_apcore.scanners import get_scanner
 
-        scanner = get_scanner(source)
+        scanner = get_scanner(source, simplify_ids=simplify_ids)
         return scanner.scan(app, include=include, exclude=exclude)
 
     # ------------------------------------------------------------------
@@ -403,6 +405,240 @@ class FastAPIApcore:
             allow_execute=(allow_execute if allow_execute is not None else s.explorer_allow_execute),
             **kwargs,
         )
+
+    def create_mcp_server(
+        self,
+        app: FastAPI | None = None,
+        *,
+        extensions_dir: str | None = None,
+        scan: bool = True,
+        scan_source: str = "openapi",
+        simplify_ids: bool = False,
+        include: str | None = None,
+        exclude: str | None = None,
+        **serve_kwargs: Any,
+    ) -> None:
+        """Scan routes or discover modules, then start an MCP server.
+
+        Supports two modes:
+
+        **Full scan** (default): scan all FastAPI routes and expose as MCP tools::
+
+            apcore.create_mcp_server(app, transport="streamable-http", port=9090)
+
+        **Custom modules**: discover from a specific directory only::
+
+            apcore.create_mcp_server(
+                extensions_dir="./mcp/modules",
+                scan=False,
+                transport="streamable-http",
+                port=9090,
+                authenticator=my_authenticator,
+            )
+
+        Args:
+            app: FastAPI application instance (required when ``scan=True``).
+            extensions_dir: Directory containing hand-written apcore modules.
+                When set, modules are auto-discovered from this directory.
+            scan: Whether to scan FastAPI routes. Defaults to True.
+                Set to False when using ``extensions_dir`` for custom modules.
+            scan_source: Scanner backend ('openapi' or 'native').
+            simplify_ids: Use simplified module IDs (function names only).
+            include: Regex pattern — only include matching module IDs.
+            exclude: Regex pattern — skip matching module IDs.
+            **serve_kwargs: Passed directly to ``apcore_mcp.serve()``.
+                Common options: ``transport``, ``host``, ``port``, ``name``,
+                ``authenticator``, ``require_auth``, ``approval_handler``,
+                ``explorer``, ``allow_execute``, ``output_formatter``.
+        """
+        try:
+            from apcore_mcp import serve as mcp_serve
+        except ImportError:
+            raise ImportError(
+                "apcore-mcp is required for create_mcp_server(). " "Install with: pip install fastapi-apcore[mcp]"
+            ) from None
+
+        from apcore import Executor, Registry
+
+        registry = Registry(extensions_dir=extensions_dir) if extensions_dir else Registry()
+
+        # Discover modules from extensions_dir
+        if extensions_dir:
+            count = registry.discover()
+            logger.info("Discovered %d module(s) from %s", count, extensions_dir)
+
+        # Scan FastAPI routes
+        if scan:
+            if app is None:
+                raise ValueError("app is required when scan=True")
+            from fastapi_apcore.output import get_writer
+            from fastapi_apcore.scanners import get_scanner
+
+            scanner = get_scanner(scan_source, simplify_ids=simplify_ids)
+            scanned = scanner.scan(app, include=include, exclude=exclude)
+            if scanned:
+                writer = get_writer(None)  # FastAPIRegistryWriter
+                writer.write(scanned, registry)
+                logger.info("Scanned and registered %d routes as MCP tools", len(scanned))
+
+        if not scan and not extensions_dir:
+            logger.warning(
+                "create_mcp_server called with scan=False and no extensions_dir — "
+                "MCP server will have no tools registered"
+            )
+
+        # Resolve serve defaults from settings
+        s = self.settings
+        serve_defaults: dict[str, Any] = {
+            "transport": s.serve_transport,
+            "host": s.serve_host,
+            "port": s.serve_port,
+            "name": s.server_name,
+            "explorer": s.explorer_enabled,
+            "explorer_prefix": s.explorer_prefix,
+            "allow_execute": s.explorer_allow_execute,
+        }
+        # User kwargs override defaults
+        for key, default in serve_defaults.items():
+            serve_kwargs.setdefault(key, default)
+
+        approval_handler = serve_kwargs.pop("approval_handler", None)
+        executor = (
+            Executor(registry, approval_handler=approval_handler)
+            if approval_handler is not None
+            else Executor(registry)
+        )
+
+        logger.info(
+            "Starting MCP server on %s:%s",
+            serve_kwargs.get("host"),
+            serve_kwargs.get("port"),
+        )
+        mcp_serve(executor, **serve_kwargs)
+
+    # ------------------------------------------------------------------
+    # CLI generation
+    # ------------------------------------------------------------------
+
+    def create_cli(
+        self,
+        app: FastAPI,
+        *,
+        prog_name: str = "apcore-cli",
+        base_url: str = "http://localhost:8000",
+        auth_header_factory: Callable[[], dict[str, str]] | None = None,
+        timeout: float = 60.0,
+        simplify_ids: bool = False,
+        scan_source: str = "openapi",
+        include: str | None = None,
+        exclude: str | None = None,
+        help_text_max_length: int = 1000,
+    ) -> Any:
+        """Create an apcore-cli Click group with all API routes as commands.
+
+        Scans FastAPI routes, registers them as HTTP proxy modules, and
+        returns a Click group ready to be invoked. Each CLI command
+        forwards requests to the running REST API.
+
+        Args:
+            app: The FastAPI application instance.
+            prog_name: CLI program name shown in help text.
+            base_url: Base URL of the running API server.
+            auth_header_factory: Optional callable returning auth headers
+                (e.g. ``{"Authorization": "Bearer xxx"}``).
+            timeout: HTTP request timeout in seconds.
+            simplify_ids: Use simplified module IDs (function names only).
+            scan_source: Scanner backend ('openapi' or 'native').
+            include: Regex pattern — only include matching module IDs.
+            exclude: Regex pattern — skip matching module IDs.
+            help_text_max_length: Max characters for CLI help text per
+                command. Defaults to 1000.
+
+        Returns:
+            A Click Group that can be invoked with ``cli(standalone_mode=True)``.
+
+        Example::
+
+            from fastapi_apcore import FastAPIApcore
+            from myapp.main import app
+
+            apcore = FastAPIApcore()
+            cli = apcore.create_cli(
+                app,
+                prog_name="myapp-cli",
+                base_url="http://localhost:8000",
+                simplify_ids=True,
+            )
+            cli(standalone_mode=True)
+        """
+        try:
+            import click
+            from apcore_cli.cli import LazyModuleGroup
+            from apcore_cli.discovery import register_discovery_commands
+            from apcore_cli.shell import register_shell_commands
+        except ImportError:
+            raise ImportError(
+                "apcore-cli is required for create_cli(). " "Install with: pip install fastapi-apcore[cli]"
+            ) from None
+
+        from apcore import Executor, Registry
+        from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
+        from fastapi_apcore.scanners import get_scanner
+
+        # 1. Scan routes
+        scanner = get_scanner(scan_source, simplify_ids=simplify_ids)
+        modules = scanner.scan(app, include=include, exclude=exclude)
+        logger.info("Scanned %d API routes", len(modules))
+
+        # 2. Register as HTTP proxy modules
+        registry = Registry()
+        writer = HTTPProxyRegistryWriter(
+            base_url=base_url,
+            auth_header_factory=auth_header_factory,
+            timeout=timeout,
+        )
+        results = writer.write(modules, registry)
+
+        registered = sum(1 for r in results if r.verified)
+        skipped = sum(1 for r in results if not r.verified)
+        if skipped:
+            logger.info("Registered %d modules (%d skipped)", registered, skipped)
+        else:
+            logger.info("Registered %d modules", registered)
+
+        executor = Executor(registry)
+
+        # 3. Build Click group
+        @click.group(
+            cls=LazyModuleGroup,
+            registry=registry,
+            executor=executor,
+            help_text_max_length=help_text_max_length,
+            name=prog_name,
+            help=f"{prog_name} — CLI for {app.title or 'FastAPI'} API.",
+        )
+        @click.version_option(
+            version=app.version or "0.0.0",
+            prog_name=prog_name,
+        )
+        @click.option(
+            "--log-level",
+            default=None,
+            type=click.Choice(
+                ["DEBUG", "INFO", "WARNING", "ERROR"],
+                case_sensitive=False,
+            ),
+            help="Log verbosity.",
+        )
+        def cli(log_level: str | None = None) -> None:
+            if log_level is not None:
+                level = getattr(logging, log_level.upper(), logging.WARNING)
+                logging.getLogger().setLevel(level)
+
+        register_discovery_commands(cli, registry)
+        register_shell_commands(cli, prog_name=prog_name)
+
+        return cli
 
     def to_openai_tools(
         self,

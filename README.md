@@ -21,13 +21,15 @@ FastAPI integration for [apcore](https://github.com/aipartnerup/apcore-python) (
 - **AI enhancement** -- enrich module metadata using local SLMs via `--ai-enhance`
 - **Async tasks** -- background task submission, status tracking, and cancellation
 - **Unified entry point** -- `FastAPIApcore` class provides property-based access to all components
+- **CLI generation** -- `create_cli()` turns FastAPI routes into a Click CLI that proxies to the running API
+- **HTTP proxy modules** -- `HTTPProxyRegistryWriter` registers scanned routes as HTTP-forwarding modules for CLI and remote execution
 
 ## Requirements
 
 - Python >= 3.11
 - FastAPI >= 0.100
-- apcore >= 0.13.0
-- apcore-toolkit >= 0.2.0
+- apcore >= 0.13.1
+- apcore-toolkit >= 0.3.0
 
 ## Installation
 
@@ -209,6 +211,13 @@ await apcore.cancel_task(task_id)
 apcore.serve(transport="streamable-http", port=9090, explorer=True)
 tools = apcore.to_openai_tools(strict=True)
 
+# Standalone MCP server (fresh registry, scan + serve in one call)
+apcore.create_mcp_server(app, transport="streamable-http", port=9090)
+
+# CLI generation (routes become Click commands that proxy to the running API)
+cli = apcore.create_cli(app, prog_name="myapp-cli", base_url="http://localhost:8000")
+cli(standalone_mode=True)
+
 # MCP helpers (inside module execution)
 await FastAPIApcore.report_progress(context, progress=50, total=100)
 response = await FastAPIApcore.elicit(context, "Please confirm")
@@ -226,6 +235,7 @@ apcore.init_app(
     app,                    # FastAPI application instance
     scan=True,              # Auto-scan routes (default: True)
     scan_source="openapi",  # Scanner backend: "openapi" or "native"
+    simplify_ids=False,     # Use simplified module IDs (function names only)
     include=None,           # Regex: only register matching module IDs
     exclude=None,           # Regex: skip matching module IDs
 )
@@ -237,6 +247,52 @@ apcore.init_app(
 2. **Scan** FastAPI routes and register them as apcore modules
 3. **Enable hot-reload** if `APCORE_HOT_RELOAD=true`
 4. **Start embedded MCP server** if `APCORE_EMBEDDED_SERVER` is configured
+
+## `create_mcp_server()` Reference
+
+Create a standalone MCP server with a fresh registry (independent of the singleton):
+
+```python
+# Full scan mode -- scan all routes and serve as MCP tools
+apcore.create_mcp_server(
+    app,
+    transport="streamable-http",
+    port=9090,
+    simplify_ids=True,
+    explorer=True,
+)
+
+# Custom modules mode -- discover from a directory only
+apcore.create_mcp_server(
+    extensions_dir="./mcp/modules",
+    scan=False,
+    transport="streamable-http",
+    port=9090,
+)
+```
+
+## `create_cli()` Reference
+
+Generate a Click CLI group that proxies to your running FastAPI server:
+
+```python
+from fastapi_apcore import FastAPIApcore
+from myapp.main import app
+
+apcore = FastAPIApcore()
+cli = apcore.create_cli(
+    app,
+    prog_name="myapp-cli",
+    base_url="http://localhost:8000",
+    simplify_ids=True,
+    help_text_max_length=500,
+)
+
+if __name__ == "__main__":
+    cli(standalone_mode=True)
+```
+
+Each scanned route becomes a CLI command. The commands forward HTTP requests to the running API using `HTTPProxyRegistryWriter`. Built-in subcommands include `list`, `describe`, `completion`, and `man`.
 
 ## Configuration
 
@@ -397,31 +453,6 @@ modules = scanner.scan(app, include=r"users\.", exclude=r"\.delete$")
 
 The `simplify_ids` option extracts the original Python function name from FastAPI's auto-generated operationId, producing much shorter and more readable module IDs. It defaults to `False` for backward compatibility.
 
-## Project Structure
-
-```
-fastapi_apcore/
-    __init__.py      # Public API -- all user-facing exports
-    client.py        # FastAPIApcore -- the main entry point
-    cli.py           # Typer CLI (scan, serve, export, tasks)
-    engine/          # Internal engine (not for direct import)
-        config.py        # ApcoreSettings -- env-based configuration
-        context.py       # FastAPIContextFactory -- Request -> Identity
-        registry.py      # Singleton management (Registry, Executor)
-        extensions.py    # FastAPIDiscoverer + FastAPIModuleValidator
-        observability.py # Tracing/Metrics/Logging auto-setup
-        tasks.py         # AsyncTaskManager singleton
-        shortcuts.py     # Convenience functions
-        serializers.py   # ScannedModule serialization
-    scanners/        # Route scanning backends
-        base.py          # BaseScanner + ScannedModule
-        native.py        # Direct route inspection
-        openapi.py       # OpenAPI spec-based scanning
-    output/          # Output writers
-        registry_writer.py  # Direct registry registration
-        yaml_writer.py      # YAML binding file generation
-```
-
 Users only need to interact with two things:
 - **`FastAPIApcore`** -- the unified entry point (import from `fastapi_apcore`)
 - **CLI** -- `fastapi-apcore scan/serve/export/tasks`
@@ -443,8 +474,10 @@ from fastapi_apcore import (
     Registry, Executor, Context, Identity, Config,
     ACL, Middleware, ModuleAnnotations, FunctionModule,
     CancelToken, PreflightResult, ModuleError,
+    ExecutionCancelledError, ModuleDisabledError,
     ApprovalHandler, AutoApproveHandler, AlwaysDenyHandler,
     EventEmitter, EventSubscriber, ApCoreEvent,
+    HTTPProxyRegistryWriter,  # lazy import, requires apcore-toolkit
     module,  # @module decorator
 )
 ```

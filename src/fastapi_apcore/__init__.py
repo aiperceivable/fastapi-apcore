@@ -39,8 +39,10 @@ from apcore import (
     ApCoreEvent,
     CancelToken,
     PreflightResult,
+    ExecutionCancelledError,
     ModuleError,
     ModuleNotFoundError,
+    ModuleDisabledError,
     ACLDeniedError,
     SchemaValidationError,
     InvalidInputError,
@@ -48,6 +50,16 @@ from apcore import (
 
 # Convenience re-exports
 from apcore import module  # noqa: F401 — @module decorator
+
+
+def __getattr__(name: str) -> object:
+    """Lazy imports for optional-dependency types."""
+    if name == "HTTPProxyRegistryWriter":
+        from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
+
+        return HTTPProxyRegistryWriter
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Main entry point
@@ -80,10 +92,14 @@ __all__ = [
     "ApCoreEvent",
     "CancelToken",
     "PreflightResult",
+    "ExecutionCancelledError",
     "ModuleError",
     "ModuleNotFoundError",
+    "ModuleDisabledError",
     "ACLDeniedError",
     "SchemaValidationError",
     "InvalidInputError",
     "module",
+    # Output writers (lazy)
+    "HTTPProxyRegistryWriter",
 ]

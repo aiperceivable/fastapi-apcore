@@ -9,11 +9,14 @@ if TYPE_CHECKING:
     from fastapi_apcore.output.yaml_writer import YAMLWriter as YAMLWriter
 
 
-def get_writer(output_format: str | None = None) -> Any:
+def get_writer(output_format: str | None = None, **kwargs: Any) -> Any:
     """Get a writer instance for the given format.
 
     Args:
-        output_format: 'yaml' for file output, None for direct registry registration.
+        output_format: 'yaml' for file output, 'http-proxy' for HTTP proxy
+            registration, or None for direct registry registration.
+        **kwargs: Passed to the writer constructor. For 'http-proxy':
+            ``base_url``, ``auth_header_factory``, ``timeout``.
 
     Returns:
         A writer instance.
@@ -26,4 +29,10 @@ def get_writer(output_format: str | None = None) -> Any:
         from fastapi_apcore.output.yaml_writer import YAMLWriter
 
         return YAMLWriter()
-    raise ValueError(f"Unknown output format '{output_format}'. Supported: 'yaml' or None (registry).")
+    if output_format == "http-proxy":
+        from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
+
+        return HTTPProxyRegistryWriter(**kwargs)
+    raise ValueError(
+        f"Unknown output format '{output_format}'. " "Supported: 'yaml', 'http-proxy', or None (registry)."
+    )

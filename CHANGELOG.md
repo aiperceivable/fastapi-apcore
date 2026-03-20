@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-20
+
+### Added
+- **`create_mcp_server()` method** -- standalone MCP server creation with two modes: full FastAPI route scan, or custom modules from an `extensions_dir`. Creates a fresh Registry/Executor (independent of the singleton), resolves serve defaults from settings, and supports `approval_handler` pass-through.
+- **`create_cli()` method** -- generate an apcore-cli Click group from FastAPI routes. Scans routes, registers them as HTTP proxy modules via `HTTPProxyRegistryWriter`, and builds a Click group with `list`, `describe`, `completion`, and `man` subcommands. Supports `help_text_max_length` for configurable help text truncation.
+- **`HTTPProxyRegistryWriter` re-export** -- available as a lazy import from `fastapi_apcore` via PEP 562 `__getattr__`. Does not break import when `apcore-toolkit` is not installed.
+- **`get_writer("http-proxy")` format** -- `output.get_writer()` now supports `"http-proxy"` format, creating an `HTTPProxyRegistryWriter` with `base_url`, `auth_header_factory`, and `timeout` kwargs.
+- **`simplify_ids` parameter on `init_app()` and `scan()`** -- consistent with `create_mcp_server()` and `create_cli()`, allowing simplified module IDs across all scanning entry points.
+- **New apcore re-exports** -- `ExecutionCancelledError` and `ModuleDisabledError` from apcore 0.13.1.
+- **10 new tests** -- covering `create_mcp_server` (ValueError guard, empty registry warning, scan+serve pipeline), `create_cli` (ImportError guard, Click group return), `scan(simplify_ids=)`, `get_writer("http-proxy")`, `get_writer` unknown format, lazy `__getattr__` import, and `__getattr__` error path.
+
+### Fixed
+- **`registry.watch(paths=...)` call in `init_app()`** -- removed invalid `paths` keyword argument. `Registry.watch()` takes no arguments; it watches the directories already configured via the constructor.
+- **`create_mcp_server(scan=False)` silent misconfiguration** -- now logs a warning when called with `scan=False` and no `extensions_dir`, since the MCP server would have zero tools.
+- **Top-level `HTTPProxyRegistryWriter` import** -- was an eager import that broke the entire package when `apcore-toolkit` lacked `http_proxy_writer`. Replaced with PEP 562 lazy `__getattr__`.
+
+### Changed
+- **Dependency versions bumped** -- `apcore>=0.13.1`, `apcore-toolkit>=0.3.0`, `apcore-cli>=0.2.1`.
+- **`typer>=0.9` replaced with `click>=8.0`** in `[cli]` optional dependency -- apcore-cli uses click directly.
+- **Package version bumped to 0.3.0**.
+
 ## [0.2.0] - 2026-03-18
 
 ### Added
