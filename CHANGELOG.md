@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-03-20
+
+### Added
+- **`max_content_width` parameter on `create_cli()`** -- overrides Click's default terminal-width-based help formatting. When the terminal is narrow, Click calculates description column width from the longest command name, often leaving zero space for descriptions (shown as `...`). This parameter forces a wider layout so descriptions are always visible.
+
+### Improved
+- **`simplify_ids` prefix optimization** -- when `simplify_ids=True`, module ID prefix now uses only the first path segment instead of all segments. This produces shorter, cleaner command names while maintaining uniqueness via function name differentiation and `deduplicate_ids()` safety net.
+  - Before: `credit_purchase.purchase.status.get_purchase_status_by_payment_intent.get` (73 chars)
+  - After: `credit_purchase.get_purchase_status_by_payment_intent.get` (57 chars)
+- Default (`simplify_ids=False`) behavior unchanged -- all path segments preserved for backward compatibility.
+
 ## [0.3.0] - 2026-03-20
 
 ### Added

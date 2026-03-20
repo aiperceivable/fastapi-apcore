@@ -121,16 +121,17 @@ class OpenAPIScanner(BaseScanner):
         return "openapi-fastapi"
 
     def _generate_module_id(self, operation: dict[str, Any], path: str, method: str) -> str:
-        """Generate module_id from tags + function_name + method.
+        """Generate module_id from prefix + function_name + method.
 
         When ``simplify_ids=True`` (set in constructor), extracts the clean
-        function name from FastAPI's operationId::
+        function name and uses only the first path segment as prefix::
 
-            GET /product/{product_id}  → product.get_product.get
-            POST /task/create          → task.create_task.post
+            GET  /product/{product_id}                      → product.get_product.get
+            POST /task/create                               → task.create_task.post
+            GET  /virtual-purchase/purchase/status/{id}     → virtual_purchase.get_purchase_status_by_payment_intent.get
 
         When ``simplify_ids=False`` (default), uses the raw operationId
-        with only the trailing method stripped::
+        with only the trailing method stripped, and all path segments as prefix::
 
             GET /product/{product_id}  → product.get_product_product__product_id_.get
         """
@@ -144,7 +145,12 @@ class OpenAPIScanner(BaseScanner):
 
         if tags:
             prefix = str(tags[0]).lower().replace(" ", "_")
+        elif self._simplify_ids:
+            # Only first path segment as prefix — shorter, still unique
+            path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
+            prefix = path_parts[0] if path_parts else "root"
         else:
+            # All path segments as prefix (default, backward compatible)
             path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
             prefix = ".".join(path_parts) if path_parts else "root"
 

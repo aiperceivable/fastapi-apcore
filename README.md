@@ -285,7 +285,7 @@ cli = apcore.create_cli(
     prog_name="myapp-cli",
     base_url="http://localhost:8000",
     simplify_ids=True,
-    help_text_max_length=500,
+    max_content_width=160,       # wider help output for long command names
 )
 
 if __name__ == "__main__":
@@ -451,7 +451,14 @@ scanner = get_scanner("native")
 modules = scanner.scan(app, include=r"users\.", exclude=r"\.delete$")
 ```
 
-The `simplify_ids` option extracts the original Python function name from FastAPI's auto-generated operationId, producing much shorter and more readable module IDs. It defaults to `False` for backward compatibility.
+The `simplify_ids` option extracts the original Python function name from FastAPI's auto-generated operationId and uses only the first path segment as prefix, producing much shorter and more readable module IDs:
+
+```
+Default:       credit_purchase.purchase.status.get_purchase_status_by_payment_intent.get  (73 chars)
+simplify_ids:  credit_purchase.get_purchase_status_by_payment_intent.get                  (57 chars)
+```
+
+It defaults to `False` for backward compatibility.
 
 Users only need to interact with two things:
 - **`FastAPIApcore`** -- the unified entry point (import from `fastapi_apcore`)

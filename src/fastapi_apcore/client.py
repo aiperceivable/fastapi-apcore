@@ -533,6 +533,7 @@ class FastAPIApcore:
         include: str | None = None,
         exclude: str | None = None,
         help_text_max_length: int = 1000,
+        max_content_width: int | None = None,
     ) -> Any:
         """Create an apcore-cli Click group with all API routes as commands.
 
@@ -553,6 +554,9 @@ class FastAPIApcore:
             exclude: Regex pattern — skip matching module IDs.
             help_text_max_length: Max characters for CLI help text per
                 command. Defaults to 1000.
+            max_content_width: Maximum width for CLI help output. When set,
+                overrides Click's default (terminal width, max 80). Useful
+                when command names are long and truncate descriptions.
 
         Returns:
             A Click Group that can be invoked with ``cli(standalone_mode=True)``.
@@ -609,6 +613,17 @@ class FastAPIApcore:
         executor = Executor(registry)
 
         # 3. Build Click group
+        ctx_settings: dict[str, Any] = {}
+        if max_content_width is not None:
+            ctx_settings["max_content_width"] = max_content_width
+
+        # Compute the effective help width for the command list.
+        # Click uses min(terminal_width, max_content_width), so when the
+        # terminal is narrow, long command names push the description column
+        # to zero and everything shows "...".  We override format_commands
+        # to use the configured max_content_width directly.
+        effective_width = max_content_width
+
         @click.group(
             cls=LazyModuleGroup,
             registry=registry,
@@ -616,6 +631,7 @@ class FastAPIApcore:
             help_text_max_length=help_text_max_length,
             name=prog_name,
             help=f"{prog_name} — CLI for {app.title or 'FastAPI'} API.",
+            context_settings=ctx_settings,
         )
         @click.version_option(
             version=app.version or "0.0.0",
@@ -637,6 +653,19 @@ class FastAPIApcore:
 
         register_discovery_commands(cli, registry)
         register_shell_commands(cli, prog_name=prog_name)
+
+        # Override format_commands to use effective_width so descriptions
+        # are not truncated when the terminal is narrower than the content.
+        if effective_width is not None:
+            _original_format_commands = cli.format_commands
+
+            def _wide_format_commands(ctx: Any, formatter: Any) -> None:
+                original_width = formatter.width
+                formatter.width = max(formatter.width, effective_width)
+                _original_format_commands(ctx, formatter)
+                formatter.width = original_width
+
+            cli.format_commands = _wide_format_commands  # type: ignore[method-assign]
 
         return cli
 
