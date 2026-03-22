@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-apcore"
-version = "0.3.1"
+version = "0.3.2"
 description = "FastAPI integration for apcore AI-Perceivable Core — exposes FastAPI routes as apcore modules with auto-discovery, schema extraction from Pydantic models, and OpenAPI-based scanning."
 requires-python = ">=3.11"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [
-    { name = "aipartnerup", email = "tercel.yi@gmail.com" },
+    { name = "aiperceivable", email = "team@aiperceivable.com" },
 ]
 keywords = [
     "fastapi",
@@ -69,5 +69,5 @@ python_version = "3.11"
 strict = true
 
 [project.urls]
-Homepage = "https://github.com/aipartnerup/"
-Repository = "https://github.com/aipartnerup/fastapi-apcore"
+Homepage = "https://github.com/aiperceivable/"
+Repository = "https://github.com/aiperceivable/fastapi-apcore"

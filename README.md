@@ -1,6 +1,6 @@
 # fastapi-apcore
 
-FastAPI integration for [apcore](https://github.com/aipartnerup/apcore-python) (AI-Perceivable Core). Expose your FastAPI routes as MCP tools with auto-discovery, Pydantic schema extraction, and built-in observability.
+FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python) (AI-Perceivable Core). Expose your FastAPI routes as MCP tools with auto-discovery, Pydantic schema extraction, and built-in observability.
 
 ## Features
 
