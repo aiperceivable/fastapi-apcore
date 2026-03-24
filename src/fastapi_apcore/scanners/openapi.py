@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from apcore_toolkit.openapi import extract_input_schema, extract_output_schema
@@ -44,7 +45,21 @@ class OpenAPIScanner(BaseScanner):
                 the function name (e.g. ``product.get_product.get``).
                 When False (default), use the full FastAPI operationId
                 (e.g. ``product.get_product_product__product_id_.get``).
+
+                .. deprecated::
+                    Use ``display.alias`` in your binding.yaml instead.
+                    ``simplify_ids=True`` now also writes the simplified name
+                    to ``metadata["suggested_alias"]`` for use by
+                    :class:`~apcore_toolkit.display.DisplayResolver`.
         """
+        if simplify_ids:
+            warnings.warn(
+                "simplify_ids=True is deprecated. Use display.alias in binding.yaml "
+                "with DisplayResolver instead (§5.13 of the apcore PROTOCOL_SPEC). "
+                "The simplified name is also available as metadata['suggested_alias'].",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._simplify_ids = simplify_ids
 
     def scan(
@@ -109,7 +124,14 @@ class OpenAPIScanner(BaseScanner):
                         url_path=path,
                         annotations=annotations,
                         documentation=documentation,
-                        metadata={"source": "openapi", "operation_id": operation_id},
+                        metadata={
+                            "source": "openapi",
+                            "operation_id": operation_id,
+                            # suggested_alias is set when simplify_ids=True so that
+                            # DisplayResolver can use it as a fallback alias without
+                            # the module_id being modified (§5.13.7).
+                            **({"suggested_alias": module_id} if self._simplify_ids else {}),
+                        },
                         warnings=[],
                     )
                 )

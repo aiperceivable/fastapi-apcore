@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-24
+
+### Added
+
+- **`commands_dir` parameter on `create_cli()` and `create_mcp_server()`** — path to a directory of plain Python function files. When set, `ConventionScanner` from `apcore-toolkit` scans for public functions and registers them as additional modules alongside scanned API routes (§5.14).
+- **`GroupedModuleGroup` in `create_cli()`** — CLI commands are now auto-grouped by namespace prefix (e.g., `myapp-cli product list` instead of `myapp-cli product.list`). Uses `GroupedModuleGroup` from `apcore-cli >= 0.3.0`.
+- **`binding_path` parameter on `create_cli()` and `create_mcp_server()`** — wires `DisplayResolver` (§5.13) into the scan pipeline. Accepts a path to a single `.binding.yaml` file or a directory of `*.binding.yaml` files. When provided, `DisplayResolver().resolve(modules, binding_path=binding_path)` is called between scan and write, populating `metadata["display"]` on all scanned modules before they are registered.
+  ```python
+  cli = apcore.create_cli(app, binding_path="bindings/")
+  mcp = apcore.create_mcp_server(app, binding_path="bindings/")
+  ```
+- **`DeprecationWarning` for `simplify_ids=True`** — emitted in `create_cli()` and `create_mcp_server()` when `simplify_ids=True`. Migrate to `binding_path` with `display.cli.alias` / `display.mcp.alias` in `binding.yaml` (§5.13).
+
+### Changed
+
+- Dependency bumps: `apcore-toolkit >= 0.4.0` (for `DisplayResolver`), `apcore-cli >= 0.3.0`, `apcore-mcp >= 0.11.0`.
+
+- `create_cli()` now uses `GroupedModuleGroup` instead of `LazyModuleGroup` as the Click group class.
+
+### Fixed
+
+- **False-positive "no tools registered" warning** — `create_mcp_server(scan=False, commands_dir="./cmds/")` no longer emits a misleading warning when modules are provided via `commands_dir` only.
+- **Convention scanner code duplication** — extracted `_apply_convention_modules()` helper shared by both `create_cli()` and `create_mcp_server()`.
+- **Security docstring** — `commands_dir` docstrings now note that the path must be trusted and developer-controlled, as files are imported and executed during scanning.
+
+### Tests
+
+- `TestDisplayOverlayIntegration` (4 tests): `DisplayResolver` called when `binding_path` is set, skipped when not set, called in both `create_cli` and `create_mcp_server`, `DeprecationWarning` emitted for `simplify_ids=True`.
+- `test_simplify_ids_emits_deprecation_warning`: verifies `DeprecationWarning` in `OpenAPIScanner.__init__`.
+- `test_simplify_ids_sets_suggested_alias_in_metadata`: verifies scanner sets `metadata["suggested_alias"]` used by `DisplayResolver`.
+
+---
+
 ## [0.3.1] - 2026-03-20
 
 ### Added

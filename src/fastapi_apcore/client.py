@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import warnings
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -406,6 +407,33 @@ class FastAPIApcore:
             **kwargs,
         )
 
+    @staticmethod
+    def _apply_convention_modules(commands_dir: str, registry: Any) -> None:
+        """Scan a commands directory and register convention modules into registry (§5.14).
+
+        Args:
+            commands_dir: Path to a directory of plain Python function files.
+                Must be a trusted, developer-controlled path — files are imported
+                and executed during scanning.
+            registry: The apcore Registry to register discovered modules into.
+        """
+        try:
+            from apcore_toolkit.convention_scanner import ConventionScanner
+            from apcore_toolkit import RegistryWriter
+
+            conv_modules = ConventionScanner().scan(commands_dir)
+            if conv_modules:
+                RegistryWriter().write(conv_modules, registry)
+                logger.info(
+                    "Convention scanner: registered %d modules from %s",
+                    len(conv_modules),
+                    commands_dir,
+                )
+        except ImportError:
+            logger.warning("apcore-toolkit not installed — convention module scanning unavailable")
+        except Exception as e:
+            logger.warning("Convention module scanning failed: %s", e)
+
     def create_mcp_server(
         self,
         app: FastAPI | None = None,
@@ -416,6 +444,8 @@ class FastAPIApcore:
         simplify_ids: bool = False,
         include: str | None = None,
         exclude: str | None = None,
+        binding_path: str | None = None,
+        commands_dir: str | None = None,
         **serve_kwargs: Any,
     ) -> None:
         """Scan routes or discover modules, then start an MCP server.
@@ -446,6 +476,15 @@ class FastAPIApcore:
             simplify_ids: Use simplified module IDs (function names only).
             include: Regex pattern — only include matching module IDs.
             exclude: Regex pattern — skip matching module IDs.
+            binding_path: Path to a ``.binding.yaml`` file or directory of
+                binding files. When provided, ``DisplayResolver`` applies
+                the ``display`` overlay (alias, description, guidance) to
+                scanned modules before they are registered (§5.13).
+            commands_dir: Path to a directory of plain Python function files.
+                When set, ``ConventionScanner`` from ``apcore-toolkit`` scans
+                for public functions and registers them as additional modules
+                alongside the scanned API routes (§5.14). Must be a trusted,
+                developer-controlled path — files are imported and executed.
             **serve_kwargs: Passed directly to ``apcore_mcp.serve()``.
                 Common options: ``transport``, ``host``, ``port``, ``name``,
                 ``authenticator``, ``require_auth``, ``approval_handler``,
@@ -459,6 +498,14 @@ class FastAPIApcore:
             ) from None
 
         from apcore import Executor, Registry
+
+        if simplify_ids:
+            warnings.warn(
+                "simplify_ids=True is deprecated. Use binding_path with display.mcp.alias "
+                "in binding.yaml instead (§5.13 of the apcore PROTOCOL_SPEC).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         registry = Registry(extensions_dir=extensions_dir) if extensions_dir else Registry()
 
@@ -477,11 +524,19 @@ class FastAPIApcore:
             scanner = get_scanner(scan_source, simplify_ids=simplify_ids)
             scanned = scanner.scan(app, include=include, exclude=exclude)
             if scanned:
+                if binding_path is not None:
+                    from apcore_toolkit.display import DisplayResolver
+
+                    scanned = DisplayResolver().resolve(scanned, binding_path=binding_path)
                 writer = get_writer(None)  # FastAPIRegistryWriter
                 writer.write(scanned, registry)
                 logger.info("Scanned and registered %d routes as MCP tools", len(scanned))
 
-        if not scan and not extensions_dir:
+        # Convention module discovery (§5.14)
+        if commands_dir is not None:
+            self._apply_convention_modules(commands_dir, registry)
+
+        if not scan and not extensions_dir and not commands_dir:
             logger.warning(
                 "create_mcp_server called with scan=False and no extensions_dir — "
                 "MCP server will have no tools registered"
@@ -532,6 +587,8 @@ class FastAPIApcore:
         scan_source: str = "openapi",
         include: str | None = None,
         exclude: str | None = None,
+        binding_path: str | None = None,
+        commands_dir: str | None = None,
         help_text_max_length: int = 1000,
         max_content_width: int | None = None,
     ) -> Any:
@@ -552,6 +609,15 @@ class FastAPIApcore:
             scan_source: Scanner backend ('openapi' or 'native').
             include: Regex pattern — only include matching module IDs.
             exclude: Regex pattern — skip matching module IDs.
+            binding_path: Path to a ``.binding.yaml`` file or directory of
+                binding files. When provided, ``DisplayResolver`` applies
+                the ``display`` overlay (alias, description, guidance) to
+                scanned modules before CLI commands are built (§5.13).
+            commands_dir: Path to a directory of plain Python function files.
+                When set, ``ConventionScanner`` from ``apcore-toolkit`` scans
+                for public functions and registers them as additional modules
+                alongside the scanned API routes (§5.14). Must be a trusted,
+                developer-controlled path — files are imported and executed.
             help_text_max_length: Max characters for CLI help text per
                 command. Defaults to 1000.
             max_content_width: Maximum width for CLI help output. When set,
@@ -577,7 +643,7 @@ class FastAPIApcore:
         """
         try:
             import click
-            from apcore_cli.cli import LazyModuleGroup
+            from apcore_cli.cli import GroupedModuleGroup
             from apcore_cli.discovery import register_discovery_commands
             from apcore_cli.shell import register_shell_commands
         except ImportError:
@@ -589,10 +655,24 @@ class FastAPIApcore:
         from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
         from fastapi_apcore.scanners import get_scanner
 
+        if simplify_ids:
+            warnings.warn(
+                "simplify_ids=True is deprecated. Use binding_path with display.cli.alias "
+                "in binding.yaml instead (§5.13 of the apcore PROTOCOL_SPEC).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         # 1. Scan routes
         scanner = get_scanner(scan_source, simplify_ids=simplify_ids)
         modules = scanner.scan(app, include=include, exclude=exclude)
         logger.info("Scanned %d API routes", len(modules))
+
+        # 1b. Apply display overlay from binding.yaml (§5.13)
+        if binding_path is not None:
+            from apcore_toolkit.display import DisplayResolver
+
+            modules = DisplayResolver().resolve(modules, binding_path=binding_path)
 
         # 2. Register as HTTP proxy modules
         registry = Registry()
@@ -610,6 +690,10 @@ class FastAPIApcore:
         else:
             logger.info("Registered %d modules", registered)
 
+        # 2b. Convention module discovery (§5.14)
+        if commands_dir is not None:
+            self._apply_convention_modules(commands_dir, registry)
+
         executor = Executor(registry)
 
         # 3. Build Click group
@@ -617,15 +701,10 @@ class FastAPIApcore:
         if max_content_width is not None:
             ctx_settings["max_content_width"] = max_content_width
 
-        # Compute the effective help width for the command list.
-        # Click uses min(terminal_width, max_content_width), so when the
-        # terminal is narrow, long command names push the description column
-        # to zero and everything shows "...".  We override format_commands
-        # to use the configured max_content_width directly.
         effective_width = max_content_width
 
         @click.group(
-            cls=LazyModuleGroup,
+            cls=GroupedModuleGroup,
             registry=registry,
             executor=executor,
             help_text_max_length=help_text_max_length,

@@ -236,3 +236,263 @@ class TestCreateCli:
         import click
 
         assert isinstance(cli, click.BaseCommand)
+
+
+class TestDisplayOverlayIntegration:
+    """Tests for binding_path / DisplayResolver wiring in create_cli and create_mcp_server."""
+
+    def test_create_cli_calls_display_resolver_when_binding_path_given(self, tmp_path) -> None:
+        """When binding_path is provided, DisplayResolver.resolve is called before write."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+        mock_app.version = "1.0.0"
+
+        mock_scanner = MagicMock()
+        scanned = [MagicMock()]
+        resolved = [MagicMock()]
+        mock_scanner.scan.return_value = scanned
+
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.display.DisplayResolver") as MockResolver,
+        ):
+            MockResolver.return_value.resolve.return_value = resolved
+            client.create_cli(mock_app, binding_path=str(tmp_path))
+
+        MockResolver.return_value.resolve.assert_called_once_with(scanned, binding_path=str(tmp_path))
+        mock_writer.write.assert_called_once_with(resolved, mock_writer.write.call_args[0][1])
+
+    def test_create_cli_skips_display_resolver_when_no_binding_path(self) -> None:
+        """When binding_path is None, DisplayResolver is never called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+        mock_app.version = "1.0.0"
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.display.DisplayResolver") as MockResolver,
+        ):
+            client.create_cli(mock_app)
+
+        MockResolver.assert_not_called()
+
+    def test_create_mcp_server_calls_display_resolver_when_binding_path_given(self, tmp_path) -> None:
+        """When binding_path is provided, DisplayResolver.resolve is called before RegistryWriter.write."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_scanner = MagicMock()
+        scanned = [MagicMock()]
+        resolved = [MagicMock()]
+        mock_scanner.scan.return_value = scanned
+        mock_writer = MagicMock()
+        mock_mcp_serve = MagicMock()
+
+        import sys
+
+        mock_mcp_module = MagicMock()
+        mock_mcp_module.serve = mock_mcp_serve
+
+        with (
+            patch("fastapi_apcore.client.FastAPIApcore.settings", new_callable=lambda: property(lambda s: MagicMock())),
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("fastapi_apcore.output.get_writer", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.display.DisplayResolver") as MockResolver,
+            patch.dict(sys.modules, {"apcore_mcp": mock_mcp_module}),
+        ):
+            MockResolver.return_value.resolve.return_value = resolved
+            client.create_mcp_server(mock_app, binding_path=str(tmp_path))
+
+        MockResolver.return_value.resolve.assert_called_once_with(scanned, binding_path=str(tmp_path))
+        mock_writer.write.assert_called_once_with(resolved, mock_writer.write.call_args[0][1])
+
+    def test_create_mcp_server_skips_display_resolver_when_no_binding_path(self) -> None:
+        """When binding_path is None, DisplayResolver is never called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+        mock_writer = MagicMock()
+        mock_mcp_serve = MagicMock()
+
+        import sys
+
+        mock_mcp_module = MagicMock()
+        mock_mcp_module.serve = mock_mcp_serve
+
+        with (
+            patch("fastapi_apcore.client.FastAPIApcore.settings", new_callable=lambda: property(lambda s: MagicMock())),
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("fastapi_apcore.output.get_writer", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.display.DisplayResolver") as MockResolver,
+            patch.dict(sys.modules, {"apcore_mcp": mock_mcp_module}),
+        ):
+            client.create_mcp_server(mock_app)
+
+        MockResolver.assert_not_called()
+
+
+class TestConventionScannerIntegration:
+    """Tests for commands_dir / ConventionScanner wiring."""
+
+    def test_create_cli_with_commands_dir(self) -> None:
+        """When commands_dir is provided, ConventionScanner is called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+        mock_app.version = "1.0.0"
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+
+        mock_conv_scanner = MagicMock()
+        mock_conv_scanner.scan.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.convention_scanner.ConventionScanner", return_value=mock_conv_scanner),
+        ):
+            client.create_cli(mock_app, commands_dir="/tmp/commands")
+
+        mock_conv_scanner.scan.assert_called_once_with("/tmp/commands")
+
+    def test_create_cli_without_commands_dir_skips_convention(self) -> None:
+        """When commands_dir is None, ConventionScanner is not called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+        mock_app.version = "1.0.0"
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_toolkit.convention_scanner.ConventionScanner") as MockConv,
+        ):
+            client.create_cli(mock_app)
+
+        MockConv.return_value.scan.assert_not_called()
+
+    def test_create_mcp_server_with_commands_dir(self) -> None:
+        """When commands_dir is provided in create_mcp_server, ConventionScanner is called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+
+        mock_conv_scanner = MagicMock()
+        mock_conv_scanner.scan.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("fastapi_apcore.output.get_writer"),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_mcp.serve"),
+            patch("apcore_toolkit.convention_scanner.ConventionScanner", return_value=mock_conv_scanner),
+        ):
+            client.create_mcp_server(mock_app, commands_dir="/tmp/commands", transport="stdio")
+
+        mock_conv_scanner.scan.assert_called_once_with("/tmp/commands")
+
+    def test_create_cli_grouped_module_group(self) -> None:
+        """create_cli now uses GroupedModuleGroup instead of LazyModuleGroup."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+        mock_app.title = "TestApp"
+        mock_app.version = "1.0.0"
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+        ):
+            cli = client.create_cli(mock_app, prog_name="test-cli")
+
+        from apcore_cli.cli import GroupedModuleGroup
+
+        assert isinstance(cli, GroupedModuleGroup)
+
+    def test_create_mcp_server_without_commands_dir_skips_convention(self) -> None:
+        """When commands_dir is None in create_mcp_server, ConventionScanner is not called."""
+        client = FastAPIApcore()
+        mock_app = MagicMock()
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("fastapi_apcore.output.get_writer"),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_mcp.serve"),
+            patch("apcore_toolkit.convention_scanner.ConventionScanner") as MockConv,
+        ):
+            client.create_mcp_server(mock_app, transport="stdio")
+
+        MockConv.return_value.scan.assert_not_called()
+
+    def test_create_mcp_server_commands_dir_only_no_false_warning(self, caplog) -> None:
+        """When scan=False + commands_dir set, the 'no tools' warning should NOT fire."""
+        client = FastAPIApcore()
+
+        mock_conv = MagicMock()
+        mock_conv.scan.return_value = [MagicMock()]
+
+        with (
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+            patch("apcore_mcp.serve"),
+            patch(
+                "fastapi_apcore.client.FastAPIApcore._apply_convention_modules",
+            ),
+        ):
+            with caplog.at_level(logging.WARNING):
+                client.create_mcp_server(
+                    scan=False,
+                    commands_dir="/tmp/commands",
+                    transport="stdio",
+                )
+
+        assert "no tools registered" not in caplog.text.lower()

@@ -8,7 +8,8 @@ FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python)
 - **Annotation inference** -- `GET` -> readonly+cacheable, `DELETE` -> destructive, `PUT` -> idempotent
 - **Pydantic schema extraction** -- input/output schemas extracted from Pydantic models and OpenAPI spec
 - **Two scanner backends** -- OpenAPI-based (accurate) and native route inspection (fast)
-- **Simplified module IDs** -- `simplify_ids=True` extracts clean function names from FastAPI operationIds
+- **Display overlay** -- `binding_path=` applies a sparse `binding.yaml` display overlay (§5.13) to control CLI/MCP/A2A surface aliases, descriptions, and guidance without touching code
+- **Simplified module IDs** -- `simplify_ids=True` extracts clean function names from FastAPI operationIds *(deprecated — use `binding_path` with `display.cli.alias` instead)*
 - **`@module` decorator** -- define standalone AI-callable modules with full schema enforcement
 - **YAML binding** -- zero-code module definitions via external `.binding.yaml` files
 - **MCP server** -- stdio, streamable-http, and SSE transports via `fastapi-apcore serve`
@@ -29,7 +30,7 @@ FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python)
 - Python >= 3.11
 - FastAPI >= 0.100
 - apcore >= 0.13.1
-- apcore-toolkit >= 0.3.0
+- apcore-toolkit >= 0.4.0
 
 ## Installation
 
@@ -258,7 +259,8 @@ apcore.create_mcp_server(
     app,
     transport="streamable-http",
     port=9090,
-    simplify_ids=True,
+    binding_path="bindings/",    # apply display overlay (§5.13) — sets MCP tool names/descriptions
+    commands_dir="commands/",    # convention-scanned plain functions (§5.14)
     explorer=True,
 )
 
@@ -271,9 +273,13 @@ apcore.create_mcp_server(
 )
 ```
 
+`binding_path` accepts a single `.binding.yaml` file or a directory of `*.binding.yaml` files. When set, `DisplayResolver` resolves `metadata["display"]["mcp"]` on all scanned modules before they are registered, so MCP tool names and descriptions reflect the overlay.
+
+`commands_dir` points to a directory of plain Python function files. When set, `ConventionScanner` from `apcore-toolkit` scans for public functions and registers them as additional modules alongside the scanned API routes (§5.14).
+
 ## `create_cli()` Reference
 
-Generate a Click CLI group that proxies to your running FastAPI server:
+Generate a Click CLI group that proxies to your running FastAPI server. Commands are auto-grouped by namespace prefix using `GroupedModuleGroup` (e.g., `myapp-cli product list` instead of `myapp-cli product.list`):
 
 ```python
 from fastapi_apcore import FastAPIApcore
@@ -284,7 +290,8 @@ cli = apcore.create_cli(
     app,
     prog_name="myapp-cli",
     base_url="http://localhost:8000",
-    simplify_ids=True,
+    binding_path="bindings/",    # apply display overlay (§5.13) — sets CLI command names/descriptions
+    commands_dir="commands/",    # convention-scanned plain functions (§5.14)
     max_content_width=160,       # wider help output for long command names
 )
 
@@ -292,7 +299,32 @@ if __name__ == "__main__":
     cli(standalone_mode=True)
 ```
 
-Each scanned route becomes a CLI command. The commands forward HTTP requests to the running API using `HTTPProxyRegistryWriter`. Built-in subcommands include `list`, `describe`, `completion`, and `man`.
+Each scanned route becomes a CLI command named after `display.cli.alias` from the binding overlay (or the module_id if no overlay is set). The commands forward HTTP requests to the running API using `HTTPProxyRegistryWriter`. Built-in subcommands include `list`, `describe`, `completion`, and `man`.
+
+`commands_dir` points to a directory of plain Python function files. When set, `ConventionScanner` from `apcore-toolkit` scans for public functions and registers them as additional modules alongside the scanned API routes (§5.14).
+
+### Display Overlay (`binding_path`)
+
+Control how each route appears to CLI users and MCP clients without changing your FastAPI code:
+
+```yaml
+# bindings/myapp.binding.yaml
+bindings:
+  - module_id: product.get_product_product__product_id_.get
+    display:
+      alias: product-get          # base alias for all surfaces
+      description: Get a product by its ID
+      cli:
+        alias: get-product        # CLI command name: myapp-cli get-product
+      mcp:
+        alias: get_product        # MCP tool name (must match [a-zA-Z_][a-zA-Z0-9_-]*)
+        guidance: |
+          Always pass product_id as a UUID string, not an integer.
+```
+
+Resolution chain per field: surface-specific override > `display` default > scanner value.
+
+> **Note:** `simplify_ids=True` is deprecated. Use `binding_path` with `display.cli.alias` / `display.mcp.alias` in `binding.yaml` instead.
 
 ## Configuration
 

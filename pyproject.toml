@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-apcore"
-version = "0.3.2"
+version = "0.4.0"
 description = "FastAPI integration for apcore AI-Perceivable Core — exposes FastAPI routes as apcore modules with auto-discovery, schema extraction from Pydantic models, and OpenAPI-based scanning."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -29,12 +29,12 @@ keywords = [
 dependencies = [
     "fastapi>=0.100",
     "apcore>=0.13.1",
-    "apcore-toolkit>=0.3.0",
+    "apcore-toolkit>=0.4.0",
 ]
 
 [project.optional-dependencies]
-mcp = ["apcore-mcp>=0.10.0"]
-cli = ["apcore-cli>=0.2.1", "click>=8.0"]
+mcp = ["apcore-mcp>=0.11.0"]
+cli = ["apcore-cli>=0.3.0", "click>=8.0"]
 all = ["fastapi-apcore[mcp,cli]"]
 dev = [
     "apdev[dev]>=0.2.3",

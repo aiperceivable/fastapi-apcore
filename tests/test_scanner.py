@@ -258,14 +258,40 @@ class TestOpenAPIScannerSimplifyIds:
         assert len(ids) == len(set(ids)), f"Duplicate IDs found: {ids}"
 
     def test_factory_passes_simplify_ids(self, app: FastAPI) -> None:
+        import warnings
+
         from fastapi_apcore.scanners import get_scanner
 
-        scanner = get_scanner("openapi", simplify_ids=True)
+        with warnings.catch_warnings(record=True):
+            scanner = get_scanner("openapi", simplify_ids=True)
         modules = scanner.scan(app)
 
         # Verify simplified IDs (no path fragments like __item_id__)
         for m in modules:
             assert "__" not in m.module_id, f"Unsimplified ID: {m.module_id}"
+
+    def test_simplify_ids_emits_deprecation_warning(self) -> None:
+        """OpenAPIScanner(simplify_ids=True) must emit a DeprecationWarning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            OpenAPIScanner(simplify_ids=True)
+
+        dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(dep_warnings) == 1
+        assert "simplify_ids" in str(dep_warnings[0].message).lower()
+        assert "deprecated" in str(dep_warnings[0].message).lower()
+
+    def test_simplify_ids_sets_suggested_alias_in_metadata(self, app: FastAPI) -> None:
+        """simplify_ids=True writes suggested_alias to module metadata."""
+        import warnings
+
+        with warnings.catch_warnings(record=True):
+            scanner = OpenAPIScanner(simplify_ids=True)
+        modules = scanner.scan(app)
+        for m in modules:
+            assert "suggested_alias" in m.metadata, f"Missing suggested_alias for {m.module_id}"
 
 
 # -- get_scanner factory -----------------------------------------------------
