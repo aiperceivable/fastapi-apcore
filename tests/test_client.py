@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from typing import Any
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -496,3 +498,101 @@ class TestConventionScannerIntegration:
                 )
 
         assert "no tools registered" not in caplog.text.lower()
+
+
+class TestCreateCliApCoreCliFeatures:
+    """Tests for apcore-cli 0.4.0 features: verbose_help, docs_url, man page support."""
+
+    def _make_cli(self, mock_app: MagicMock, **kwargs: Any) -> Any:
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+        mock_writer = MagicMock()
+        mock_writer.write.return_value = []
+        with (
+            patch("fastapi_apcore.scanners.get_scanner", return_value=mock_scanner),
+            patch("apcore_toolkit.output.http_proxy_writer.HTTPProxyRegistryWriter", return_value=mock_writer),
+            patch("apcore.Registry"),
+            patch("apcore.Executor"),
+        ):
+            return FastAPIApcore().create_cli(mock_app, **kwargs)
+
+    def _make_app(self) -> MagicMock:
+        app = MagicMock()
+        app.title = "TestApp"
+        app.version = "1.2.3"
+        return app
+
+    def test_set_verbose_help_called_with_default_false(self, monkeypatch: Any) -> None:
+        """set_verbose_help(False) is called when verbose_help is not passed.
+
+        sys.argv is isolated so a pytest --verbose invocation does not bleed in.
+        """
+        monkeypatch.setattr("sys.argv", ["pytest"])
+        with patch("apcore_cli.cli.set_verbose_help") as mock_svh:
+            self._make_cli(self._make_app())
+        mock_svh.assert_called_once_with(False)
+
+    def test_set_verbose_help_called_with_true(self, monkeypatch: Any) -> None:
+        """set_verbose_help(True) is called when verbose_help=True."""
+        monkeypatch.setattr("sys.argv", ["pytest"])
+        with patch("apcore_cli.cli.set_verbose_help") as mock_svh:
+            self._make_cli(self._make_app(), verbose_help=True)
+        mock_svh.assert_called_once_with(True)
+
+    def test_set_verbose_help_from_argv(self, monkeypatch: Any) -> None:
+        """--verbose in sys.argv triggers set_verbose_help(True) even without verbose_help=True."""
+        monkeypatch.setattr("sys.argv", ["mycli", "--verbose"])
+        with patch("apcore_cli.cli.set_verbose_help") as mock_svh:
+            self._make_cli(self._make_app())
+        mock_svh.assert_called_once_with(True)
+
+    def test_set_docs_url_called_when_provided(self) -> None:
+        """set_docs_url is called with the provided URL."""
+        with patch("apcore_cli.cli.set_docs_url") as mock_sdu:
+            self._make_cli(self._make_app(), docs_url="https://docs.example.com/cli")
+        mock_sdu.assert_called_once_with("https://docs.example.com/cli")
+
+    def test_set_docs_url_called_with_none_to_clear(self) -> None:
+        """set_docs_url(None) is always called to clear stale state from a prior create_cli() call."""
+        with patch("apcore_cli.cli.set_docs_url") as mock_sdu:
+            self._make_cli(self._make_app())
+        mock_sdu.assert_called_once_with(None)
+
+    def test_configure_man_help_called(self) -> None:
+        """configure_man_help is called after all commands are registered."""
+        with patch("apcore_cli.shell.configure_man_help") as mock_cmh:
+            self._make_cli(self._make_app(), prog_name="myapp", docs_url="https://docs.example.com")
+        mock_cmh.assert_called_once()
+        _, kwargs = mock_cmh.call_args
+        assert kwargs["prog_name"] == "myapp"
+        assert kwargs["version"] == "1.2.3"
+        assert kwargs["docs_url"] == "https://docs.example.com"
+
+    def test_configure_man_help_called_without_docs_url(self) -> None:
+        """configure_man_help is still called even without docs_url."""
+        with patch("apcore_cli.shell.configure_man_help") as mock_cmh:
+            self._make_cli(self._make_app(), prog_name="myapp")
+        mock_cmh.assert_called_once()
+        _, kwargs = mock_cmh.call_args
+        assert kwargs["docs_url"] is None
+
+    def test_cli_has_verbose_flag(self) -> None:
+        """The returned CLI group exposes a --verbose flag (checks user-facing option name)."""
+        cli = self._make_cli(self._make_app())
+        all_opts = [opt for p in cli.params for opt in getattr(p, "opts", [])]
+        assert "--verbose" in all_opts
+
+    def test_cli_has_man_option(self) -> None:
+        """configure_man_help adds a --man option to the CLI group (integration check)."""
+        # Use the real configure_man_help (not mocked) so we verify it actually
+        # mutates cli.params.  The other tests already verify it is called correctly.
+        cli = self._make_cli(self._make_app())
+        param_names = [p.name for p in cli.params]
+        assert "man" in param_names
+
+    def test_configure_man_help_receives_cli_group(self) -> None:
+        """configure_man_help is called with the constructed CLI group as first arg."""
+        with patch("apcore_cli.shell.configure_man_help") as mock_cmh:
+            cli = self._make_cli(self._make_app(), prog_name="myapp")
+        args, _ = mock_cmh.call_args
+        assert args[0] is cli

@@ -30,6 +30,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import warnings
 from typing import TYPE_CHECKING, Any
@@ -591,6 +592,8 @@ class FastAPIApcore:
         commands_dir: str | None = None,
         help_text_max_length: int = 1000,
         max_content_width: int | None = None,
+        docs_url: str | None = None,
+        verbose_help: bool = False,
     ) -> Any:
         """Create an apcore-cli Click group with all API routes as commands.
 
@@ -623,6 +626,14 @@ class FastAPIApcore:
             max_content_width: Maximum width for CLI help output. When set,
                 overrides Click's default (terminal width, max 80). Useful
                 when command names are long and truncate descriptions.
+            docs_url: Base URL for online documentation (e.g.
+                ``"https://docs.example.com/cli"``). When set, the URL is
+                embedded in ``--help`` output and man pages generated via
+                ``--help --man``.
+            verbose_help: When ``True``, show built-in apcore options
+                (``--input``, ``--yes``, ``--large-input``, ``--format``) in
+                ``--help`` output. Defaults to ``False`` (hidden). Users can
+                also toggle this at runtime with the ``--verbose`` flag.
 
         Returns:
             A Click Group that can be invoked with ``cli(standalone_mode=True)``.
@@ -637,15 +648,15 @@ class FastAPIApcore:
                 app,
                 prog_name="myapp-cli",
                 base_url="http://localhost:8000",
-                simplify_ids=True,
+                docs_url="https://docs.example.com/cli",
             )
             cli(standalone_mode=True)
         """
         try:
             import click
-            from apcore_cli.cli import GroupedModuleGroup
+            from apcore_cli.cli import GroupedModuleGroup, set_docs_url, set_verbose_help
             from apcore_cli.discovery import register_discovery_commands
-            from apcore_cli.shell import register_shell_commands
+            from apcore_cli.shell import configure_man_help, register_shell_commands
         except ImportError:
             raise ImportError(
                 "apcore-cli is required for create_cli(). " "Install with: pip install fastapi-apcore[cli]"
@@ -654,6 +665,17 @@ class FastAPIApcore:
         from apcore import Executor, Registry
         from apcore_toolkit.output.http_proxy_writer import HTTPProxyRegistryWriter
         from fastapi_apcore.scanners import get_scanner
+
+        # Apply apcore-cli 0.4.0 module-level settings before commands are built.
+        # Pre-parse sys.argv so --verbose also takes effect when passed alongside
+        # --help (Click processes --help before the group callback fires).
+        # Note: set_verbose_help / set_docs_url mutate apcore-cli module-level
+        # globals — each create_cli() call resets them to the supplied values.
+        # This is intentional: the last CLI created wins, matching apcore-cli's
+        # own create_cli() behaviour.
+        effective_verbose = verbose_help or "--verbose" in sys.argv[1:]
+        set_verbose_help(effective_verbose)
+        set_docs_url(docs_url)  # Always set (None clears stale value from a prior call)
 
         if simplify_ids:
             warnings.warn(
@@ -702,6 +724,7 @@ class FastAPIApcore:
             ctx_settings["max_content_width"] = max_content_width
 
         effective_width = max_content_width
+        _cli_description = f"{prog_name} — CLI for {app.title or 'FastAPI'} API."
 
         @click.group(
             cls=GroupedModuleGroup,
@@ -709,7 +732,7 @@ class FastAPIApcore:
             executor=executor,
             help_text_max_length=help_text_max_length,
             name=prog_name,
-            help=f"{prog_name} — CLI for {app.title or 'FastAPI'} API.",
+            help=_cli_description,
             context_settings=ctx_settings,
         )
         @click.version_option(
@@ -725,13 +748,32 @@ class FastAPIApcore:
             ),
             help="Log verbosity.",
         )
-        def cli(log_level: str | None = None) -> None:
+        @click.option(
+            "--verbose",
+            "verbose_flag",
+            is_flag=True,
+            default=False,
+            is_eager=True,  # Process before non-eager params so subcommand --help sees it
+            help="Show all options in help output (including built-in apcore options).",
+        )
+        def cli(log_level: str | None = None, verbose_flag: bool = False) -> None:
             if log_level is not None:
                 level = getattr(logging, log_level.upper(), logging.WARNING)
                 logging.getLogger().setLevel(level)
+            if verbose_flag:
+                set_verbose_help(True)
 
         register_discovery_commands(cli, registry)
         register_shell_commands(cli, prog_name=prog_name)
+
+        # Enable --help --man to generate a full roff man page covering all commands.
+        configure_man_help(
+            cli,
+            prog_name=prog_name,
+            version=app.version or "0.0.0",
+            description=_cli_description,
+            docs_url=docs_url,
+        )
 
         # Override format_commands to use effective_width so descriptions
         # are not truncated when the terminal is narrower than the content.

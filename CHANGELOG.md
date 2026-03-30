@@ -2,10 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.0] - 2026-03-24
+## [0.4.0] - 2026-03-30
 
 ### Added
 
+- **`docs_url` parameter on `create_cli()`** — base URL for online documentation (e.g. `"https://docs.example.com/cli"`). When set, the URL is embedded in man pages generated via `--help --man` and passed to `set_docs_url()` from apcore-cli so it appears in per-command help footers.
+- **`verbose_help` parameter on `create_cli()`** — when `True`, built-in apcore options (`--input`, `--yes`, `--large-input`, `--format`) are shown in `--help` output. Defaults to `False` (hidden). Calls `set_verbose_help()` from apcore-cli 0.4.0; also pre-parses `sys.argv` so `--verbose` on the command line takes effect before Click renders `--help`.
+- **`--verbose` flag on the generated CLI group** — runtime toggle for the verbose help behaviour. Equivalent to passing `verbose_help=True` to `create_cli()`, but can be used by end-users without changing application code.
+- **Man page support via `configure_man_help()`** — after all commands are registered, `configure_man_help()` from apcore-cli 0.4.0 is called automatically. Users can run `mycli --help --man | man -` to view a full roff man page covering all registered commands.
 - **`commands_dir` parameter on `create_cli()` and `create_mcp_server()`** — path to a directory of plain Python function files. When set, `ConventionScanner` from `apcore-toolkit` scans for public functions and registers them as additional modules alongside scanned API routes (§5.14).
 - **`GroupedModuleGroup` in `create_cli()`** — CLI commands are now auto-grouped by namespace prefix (e.g., `myapp-cli product list` instead of `myapp-cli product.list`). Uses `GroupedModuleGroup` from `apcore-cli >= 0.3.0`.
 - **`binding_path` parameter on `create_cli()` and `create_mcp_server()`** — wires `DisplayResolver` (§5.13) into the scan pipeline. Accepts a path to a single `.binding.yaml` file or a directory of `*.binding.yaml` files. When provided, `DisplayResolver().resolve(modules, binding_path=binding_path)` is called between scan and write, populating `metadata["display"]` on all scanned modules before they are registered.
@@ -15,10 +19,12 @@ All notable changes to this project will be documented in this file.
   ```
 - **`DeprecationWarning` for `simplify_ids=True`** — emitted in `create_cli()` and `create_mcp_server()` when `simplify_ids=True`. Migrate to `binding_path` with `display.cli.alias` / `display.mcp.alias` in `binding.yaml` (§5.13).
 
+
 ### Changed
 
+- Dependency floor raised: `apcore-cli >= 0.4.0` (for `set_verbose_help`, `set_docs_url`, `configure_man_help`).
+- Dependency floor raised: `apcore-toolkit >= 0.4.1` (latest patch at time of release; 0.4.1 is already installed as a runtime dep of apcore-toolkit-python).
 - Dependency bumps: `apcore-toolkit >= 0.4.0` (for `DisplayResolver`), `apcore-cli >= 0.3.0`, `apcore-mcp >= 0.11.0`.
-
 - `create_cli()` now uses `GroupedModuleGroup` instead of `LazyModuleGroup` as the Click group class.
 
 ### Fixed
@@ -29,6 +35,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tests
 
+- `TestCreateCliApCoreCliFeatures` (10 tests): verifies `set_verbose_help` and `set_docs_url` are called with correct values (including `None` to clear stale state); confirms `sys.argv` pre-parse elevates `--verbose` before Click renders `--help`; confirms `--verbose` and `--man` options are present on the generated CLI group; integration check that the real `configure_man_help` mutates `cli.params`; `test_configure_man_help_receives_cli_group` verifies the CLI group is passed as the first positional argument. Tests use `monkeypatch` to isolate `sys.argv` so a pytest `--verbose` invocation does not bleed into assertions.
 - `TestDisplayOverlayIntegration` (4 tests): `DisplayResolver` called when `binding_path` is set, skipped when not set, called in both `create_cli` and `create_mcp_server`, `DeprecationWarning` emitted for `simplify_ids=True`.
 - `test_simplify_ids_emits_deprecation_warning`: verifies `DeprecationWarning` in `OpenAPIScanner.__init__`.
 - `test_simplify_ids_sets_suggested_alias_in_metadata`: verifies scanner sets `metadata["suggested_alias"]` used by `DisplayResolver`.
