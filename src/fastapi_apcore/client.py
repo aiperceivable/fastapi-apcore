@@ -724,7 +724,14 @@ class FastAPIApcore:
             ctx_settings["max_content_width"] = max_content_width
 
         effective_width = max_content_width
-        _cli_description = f"{prog_name} — CLI for {app.title or 'FastAPI'} API."
+        _cli_description = (
+            f"{prog_name} — CLI for {app.title or 'FastAPI'} API.\n\n"
+            "Tips:\n"
+            f"  {prog_name} --help --verbose   Show all options including built-in apcore flags\n"
+            f"  {prog_name} --help --man        Generate a full roff man page for all commands\n"
+            f"  {prog_name} list                List all available commands\n"
+            f"  {prog_name} describe MODULE_ID  Show schema and annotations for a command"
+        )
 
         @click.group(
             cls=GroupedModuleGroup,

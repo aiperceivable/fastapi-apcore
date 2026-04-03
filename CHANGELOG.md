@@ -19,12 +19,12 @@ All notable changes to this project will be documented in this file.
   ```
 - **`DeprecationWarning` for `simplify_ids=True`** — emitted in `create_cli()` and `create_mcp_server()` when `simplify_ids=True`. Migrate to `binding_path` with `display.cli.alias` / `display.mcp.alias` in `binding.yaml` (§5.13).
 
-
 ### Changed
 
-- Dependency floor raised: `apcore-cli >= 0.4.0` (for `set_verbose_help`, `set_docs_url`, `configure_man_help`).
-- Dependency floor raised: `apcore-toolkit >= 0.4.1` (latest patch at time of release; 0.4.1 is already installed as a runtime dep of apcore-toolkit-python).
-- Dependency bumps: `apcore-toolkit >= 0.4.0` (for `DisplayResolver`), `apcore-cli >= 0.3.0`, `apcore-mcp >= 0.11.0`.
+- Dependency floor raised: `apcore >= 0.15.1` (required by apcore-cli 0.5.0 and apcore-mcp 0.12.0 for Config Bus support).
+- Dependency floor raised: `apcore-cli >= 0.5.0` (Config Bus unified configuration, enhanced man page rendering with pager, help footer hints for `--verbose`/`--man`).
+- Dependency floor raised: `apcore-mcp >= 0.12.0` (Config Bus namespace registration, new error formatter registry).
+- Dependency floor raised: `apcore-toolkit >= 0.4.1`.
 - `create_cli()` now uses `GroupedModuleGroup` instead of `LazyModuleGroup` as the Click group class.
 
 ### Fixed
