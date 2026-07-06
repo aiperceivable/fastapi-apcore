@@ -51,27 +51,31 @@ class NativeFastAPIScanner(BaseScanner):
         """
         modules: list[ScannedModule] = []
 
-        for route in app.routes:
-            if not isinstance(route, APIRoute):
-                continue
-
+        for route, prefix, extra_tags in self.collect_api_routes(app.routes):
             endpoint = route.endpoint
             if not callable(endpoint):
                 continue
 
+            full_path = prefix + route.path
+
+            tags = self._extract_tags(route, extra_tags)
+
             for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-                module_id = self._generate_module_id(route, method)
-                description = self._extract_description(endpoint, route, method)
+                module_id = self._generate_module_id(route, tags, full_path, method)
+                description = self._extract_description(
+                    endpoint, route, full_path, method
+                )
                 documentation = self._extract_documentation(endpoint)
                 annotations = self.infer_annotations_from_method(method)
                 target = self._generate_target(endpoint)
-                tags = self._extract_tags(route)
-                input_schema = self._extract_input_schema(route, endpoint)
+                input_schema = self._extract_input_schema(full_path, endpoint)
                 output_schema = self._extract_output_schema(route)
 
                 warnings: list[str] = []
                 if not input_schema.get("properties"):
-                    warnings.append(f"Route '{method} {route.path}' has no input parameters")
+                    warnings.append(
+                        f"Route '{method} {full_path}' has no input parameters"
+                    )
 
                 modules.append(
                     ScannedModule(
@@ -82,7 +86,7 @@ class NativeFastAPIScanner(BaseScanner):
                         tags=tags,
                         target=target,
                         http_method=method,
-                        url_path=route.path,
+                        url_path=full_path,
                         annotations=annotations,
                         documentation=documentation,
                         metadata={"source": "native"},
@@ -96,7 +100,9 @@ class NativeFastAPIScanner(BaseScanner):
     def get_source_name(self) -> str:
         return "native-fastapi"
 
-    def _generate_module_id(self, route: APIRoute, method: str) -> str:
+    def _generate_module_id(
+        self, route: APIRoute, tags: list[str], path: str, method: str
+    ) -> str:
         """Generate module_id from tags + function name + method.
 
         Format: {tag}.{function_name}.{method}
@@ -106,20 +112,24 @@ class NativeFastAPIScanner(BaseScanner):
 
         # Use first tag as prefix (most FastAPI apps tag by resource)
         tag = ""
-        if route.tags:
-            tag = str(route.tags[0]).lower().replace(" ", "_")
+        if tags:
+            tag = str(tags[0]).lower().replace(" ", "_")
 
         if tag:
             module_id = f"{tag}.{func_name}.{method.lower()}"
         else:
             # Derive from URL path: /task/create → task.create
-            path_parts = [p for p in route.path.strip("/").split("/") if not p.startswith("{")]
+            path_parts = [
+                p for p in path.strip("/").split("/") if not p.startswith("{")
+            ]
             prefix = ".".join(path_parts) if path_parts else "root"
             module_id = f"{prefix}.{func_name}.{method.lower()}"
 
         return re.sub(r"[^a-zA-Z0-9._]", "_", module_id)
 
-    def _extract_description(self, endpoint: Callable[..., Any], route: APIRoute, method: str) -> str:
+    def _extract_description(
+        self, endpoint: Callable[..., Any], route: APIRoute, path: str, method: str
+    ) -> str:
         """Extract description from route summary, docstring, or auto-generate."""
         if route.summary:
             return route.summary
@@ -128,7 +138,7 @@ class NativeFastAPIScanner(BaseScanner):
         doc = inspect.getdoc(endpoint)
         if doc:
             return doc.split("\n")[0].strip()
-        return f"{method} {route.path}"
+        return f"{method} {path}"
 
     def _extract_documentation(self, endpoint: Callable[..., Any]) -> str | None:
         """Extract full docstring as documentation."""
@@ -141,15 +151,23 @@ class NativeFastAPIScanner(BaseScanner):
         name = getattr(endpoint, "__qualname__", endpoint.__name__)
         return f"{module}:{name}"
 
-    def _extract_tags(self, route: APIRoute) -> list[str]:
-        """Extract tags from route tags."""
-        return [str(t) for t in (route.tags or [])]
+    def _extract_tags(
+        self, route: APIRoute, extra_tags: tuple[str, ...] = ()
+    ) -> list[str]:
+        """Extract tags from route tags, merging any inherited from include_router."""
+        merged: list[str] = list(extra_tags)
+        for tag in route.tags or []:
+            if str(tag) not in merged:
+                merged.append(str(tag))
+        return merged
 
-    def _extract_input_schema(self, route: APIRoute, endpoint: Callable[..., Any]) -> dict[str, Any]:
+    def _extract_input_schema(
+        self, path: str, endpoint: Callable[..., Any]
+    ) -> dict[str, Any]:
         """Extract input schema from path params, query params, and request body.
 
         Inspects the endpoint function signature to find:
-        - Path parameters (from route.path)
+        - Path parameters (from the route path)
         - Query parameters (simple typed params without Depends)
         - Request body (Pydantic BaseModel params)
         """
@@ -160,7 +178,7 @@ class NativeFastAPIScanner(BaseScanner):
             "required": [],
         }
 
-        path_params = set(re.findall(r"\{(\w+)\}", route.path))
+        path_params = set(re.findall(r"\{(\w+)\}", path))
         sig = inspect.signature(endpoint)
 
         try:
@@ -179,7 +197,9 @@ class NativeFastAPIScanner(BaseScanner):
             if self._is_pydantic_model(param_type):
                 try:
                     body_schema = param_type.model_json_schema()
-                    for prop_name, prop_schema in body_schema.get("properties", {}).items():
+                    for prop_name, prop_schema in body_schema.get(
+                        "properties", {}
+                    ).items():
                         schema["properties"][prop_name] = prop_schema
                         if prop_name in body_schema.get("required", []):
                             schema["required"].append(prop_name)
@@ -190,7 +210,9 @@ class NativeFastAPIScanner(BaseScanner):
             # Path or query parameter
             prop = self._python_type_to_json_schema(param_type)
             if param_name in path_params:
-                prop["description"] = prop.get("description", f"Path parameter: {param_name}")
+                prop["description"] = prop.get(
+                    "description", f"Path parameter: {param_name}"
+                )
 
             schema["properties"][param_name] = prop
 
@@ -208,7 +230,9 @@ class NativeFastAPIScanner(BaseScanner):
 
         if route.response_model is not None:
             try:
-                if isinstance(route.response_model, type) and issubclass(route.response_model, BaseModel):
+                if isinstance(route.response_model, type) and issubclass(
+                    route.response_model, BaseModel
+                ):
                     return route.response_model.model_json_schema()
             except Exception:
                 pass
@@ -277,6 +301,9 @@ class NativeFastAPIScanner(BaseScanner):
 
         # list[T]
         if origin is list and args:
-            return {"type": "array", "items": NativeFastAPIScanner._python_type_to_json_schema(args[0])}
+            return {
+                "type": "array",
+                "items": NativeFastAPIScanner._python_type_to_json_schema(args[0]),
+            }
 
         return {"type": "string"}

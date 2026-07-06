@@ -130,7 +130,11 @@ class OpenAPIScanner(BaseScanner):
                             # suggested_alias is set when simplify_ids=True so that
                             # DisplayResolver can use it as a fallback alias without
                             # the module_id being modified (§5.13.7).
-                            **({"suggested_alias": module_id} if self._simplify_ids else {}),
+                            **(
+                                {"suggested_alias": module_id}
+                                if self._simplify_ids
+                                else {}
+                            ),
                         },
                         warnings=[],
                     )
@@ -142,7 +146,9 @@ class OpenAPIScanner(BaseScanner):
     def get_source_name(self) -> str:
         return "openapi-fastapi"
 
-    def _generate_module_id(self, operation: dict[str, Any], path: str, method: str) -> str:
+    def _generate_module_id(
+        self, operation: dict[str, Any], path: str, method: str
+    ) -> str:
         """Generate module_id from prefix + function_name + method.
 
         When ``simplify_ids=True`` (set in constructor), extracts the clean
@@ -169,11 +175,15 @@ class OpenAPIScanner(BaseScanner):
             prefix = str(tags[0]).lower().replace(" ", "_")
         elif self._simplify_ids:
             # Only first path segment as prefix — shorter, still unique
-            path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
+            path_parts = [
+                p for p in path.strip("/").split("/") if not p.startswith("{")
+            ]
             prefix = path_parts[0] if path_parts else "root"
         else:
             # All path segments as prefix (default, backward compatible)
-            path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
+            path_parts = [
+                p for p in path.strip("/").split("/") if not p.startswith("{")
+            ]
             prefix = ".".join(path_parts) if path_parts else "root"
 
         module_id = f"{prefix}.{func_name}.{method.lower()}"
@@ -222,12 +232,8 @@ class OpenAPIScanner(BaseScanner):
 
         Iterates FastAPI routes to extract endpoint function references.
         """
-        from fastapi.routing import APIRoute
-
         view_map: dict[str, str] = {}
-        for route in app.routes:
-            if not isinstance(route, APIRoute):
-                continue
+        for route, *_ in self.collect_api_routes(app.routes):
             endpoint = route.endpoint
             if not callable(endpoint):
                 continue

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -98,6 +99,64 @@ class BaseScanner(ABC):
     def infer_annotations_from_method(method: str) -> ModuleAnnotations:
         """Infer behavioral annotations from an HTTP method."""
         return _ToolkitBaseScanner.infer_annotations_from_method(method)
+
+    def collect_api_routes(
+        self,
+        routes: Iterable[Any],
+        prefix: str = "",
+        extra_tags: tuple[str, ...] = (),
+    ) -> list[tuple[Any, str, tuple[str, ...]]]:
+        """Recursively collect APIRoute instances with their effective prefix and tags.
+
+        FastAPI >=0.128 stopped flattening included routers into ``app.routes``;
+        it inserts a lazy ``_IncludedRouter`` node that references the original
+        ``APIRouter`` instead of copying its routes. Older versions expose
+        ``APIRoute`` objects directly. This walk handles both shapes so routes
+        are discovered regardless of the installed FastAPI version.
+
+        Args:
+            routes: Route objects to walk (typically ``app.routes``).
+            prefix: URL prefix accumulated from enclosing routers/mounts.
+            extra_tags: Tags accumulated from enclosing ``include_router`` calls.
+
+        Returns:
+            List of ``(route, prefix, extra_tags)`` tuples, one per APIRoute.
+        """
+        from fastapi.routing import APIRoute
+
+        collected: list[tuple[Any, str, tuple[str, ...]]] = []
+        for route in routes:
+            if isinstance(route, APIRoute):
+                collected.append((route, prefix, extra_tags))
+                continue
+
+            # FastAPI >=0.128 lazy include node: descend into the referenced router.
+            original_router = getattr(route, "original_router", None)
+            if original_router is not None:
+                context = getattr(route, "include_context", None)
+                include_prefix = getattr(context, "prefix", "") or ""
+                include_tags = tuple(
+                    str(t) for t in (getattr(context, "tags", None) or ())
+                )
+                collected.extend(
+                    self.collect_api_routes(
+                        original_router.routes,
+                        prefix + include_prefix,
+                        extra_tags + include_tags,
+                    )
+                )
+                continue
+
+            # Starlette Mount / sub-router exposing nested routes directly.
+            sub_routes = getattr(route, "routes", None)
+            if sub_routes:
+                mount_prefix = getattr(route, "path", "") or ""
+                collected.extend(
+                    self.collect_api_routes(
+                        sub_routes, prefix + mount_prefix, extra_tags
+                    )
+                )
+        return collected
 
     def deduplicate_ids(self, modules: list[ScannedModule]) -> list[ScannedModule]:
         """Resolve duplicate module IDs by appending _2, _3, etc."""

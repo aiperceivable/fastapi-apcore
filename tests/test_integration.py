@@ -77,6 +77,31 @@ class TestScanAndRegister:
         filtered = scanner.scan(app, exclude=r"\.post$")
         assert len(filtered) < len(all_modules)
 
+    def test_scan_native_resolves_include_prefix_and_tags(self):
+        """Native scanner descends into lazily-included routers.
+
+        Regression: FastAPI >=0.128 stopped flattening included routers into
+        ``app.routes`` and inserts a lazy ``_IncludedRouter`` node instead. The
+        scanner must follow it and reconstruct the effective path and tags from
+        the ``include_router(prefix=..., tags=...)`` call.
+        """
+        app = FastAPI(title="Nested API")
+        router = APIRouter()
+
+        @router.get("/ping", summary="Ping")
+        async def ping():
+            return {"ok": True}
+
+        app.include_router(router, prefix="/v1", tags=["health"])
+
+        scanner = get_scanner("native")
+        modules = scanner.scan(app)
+        assert len(modules) == 1
+        module = modules[0]
+        assert module.url_path == "/v1/ping"
+        assert "health" in module.tags
+        assert module.module_id.startswith("health.")
+
 
 class TestClientSingleton:
     def test_singleton_pattern(self):
