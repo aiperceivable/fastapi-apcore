@@ -656,7 +656,7 @@ class FastAPIApcore:
             import click
             from apcore_cli.cli import GroupedModuleGroup, set_docs_url, set_verbose_help
             from apcore_cli.discovery import register_discovery_commands
-            from apcore_cli.shell import configure_man_help, register_shell_commands
+            from apcore_cli.shell import configure_man_help, register_completion_command
         except ImportError:
             raise ImportError(
                 "apcore-cli is required for create_cli(). " "Install with: pip install fastapi-apcore[cli]"
@@ -771,7 +771,7 @@ class FastAPIApcore:
                 set_verbose_help(True)
 
         register_discovery_commands(cli, registry)
-        register_shell_commands(cli, prog_name=prog_name)
+        register_completion_command(cli, prog_name=prog_name)
 
         # Enable --help --man to generate a full roff man page covering all commands.
         configure_man_help(

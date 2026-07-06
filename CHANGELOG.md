@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-07-06
+
+Dependency uplift to the aligned apcore 0.25.0 / apcore-toolkit 0.9.1 / apcore-mcp 0.17.0 / apcore-cli 0.10.2 release train, plus the source fixes required by breaking changes in that range. All 170 tests pass.
+
+### Added
+
+- **ACL demo (`examples/acl_demo/`)** — runnable FastAPI app showing apcore Access Control List enforcement on module calls: an `acl.yaml` (admins may call anything; `orders.list` public; else denied), a route that maps `ACLDeniedError` to HTTP 403, and a demo auth dependency that populates `request.state.user`. Covered end-to-end by `tests/test_acl_demo.py` (4 tests: admin allowed, anonymous/non-admin denied, public read). A companion "Access control (ACL)" subsection was added to the README.
+
+### Changed
+
+- Dependency floor raised: `apcore >= 0.25.0` (was `>= 0.15.1`) — picks up config-driven ACL discovery, public registry-id constants, per-instance `ToggleState`, and the unified `Context.create()` / async `AsyncTaskManager` surface.
+- Dependency floor raised: `apcore-toolkit >= 0.9.1` (was `>= 0.4.1`) — hardened OpenAPI parser (integer status-code keys, explicit `null`) automatically improves `OpenAPIScanner` output; `format_*` surface formatters and `ConventionScanner` are available.
+- Dependency floor raised: `apcore-mcp >= 0.17.0` (was `>= 0.12.0`) — async approval Phase B (`approval_store` / `approval_notify`), `output_format`, and `observability` flow through `create_mcp_server(**serve_kwargs)` with no new code.
+- Dependency floor raised: `apcore-cli >= 0.10.2` (was `>= 0.5.0`).
+
+### Fixed
+
+- **`create_cli()` broke against apcore-cli >= 0.9** — `register_shell_commands` was removed from `apcore_cli.shell` (dead-code cleanup). `create_cli()` raised `ImportError` at runtime and aborted before returning a Click group. Switched to `register_completion_command` (the surviving public helper); `configure_man_help` — already called separately — continues to provide `--help --man`.
+- **`fastapi-apcore tasks cleanup` never cleaned up against apcore >= 0.22** — `AsyncTaskManager.cleanup()` became a coroutine, but the CLI called it synchronously and echoed the un-awaited coroutine object as the count. Now driven via `asyncio.run(tm.cleanup(...))`.
+
+### Changed (SDK feature adoption)
+
+- **`cancellable_call()` / `cancellable_call_async()` use the first-class `cancel_token` parameter** — apcore 0.22 promoted `cancel_token` to a `Context.create()` argument and flagged the post-hoc `context.cancel_token = token` mutation as an anti-pattern. The `Context.create()` branches now pass `Context.create(cancel_token=token)`; request-derived contexts still bind the token on the reused context.
+
+### Notes
+
+- No change needed for `DisplayResolver`/`ConventionScanner` (§5.13/§5.14), the public `MAX_MODULE_ID_LENGTH`/`RESERVED_WORDS` constants (now exported from the `apcore` root in 0.25), or observability middleware assembly — the existing integration already matches the current SDK surface.
+
 ## [0.4.0] - 2026-03-30
 
 ### Added

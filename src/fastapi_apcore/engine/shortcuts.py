@@ -116,9 +116,13 @@ def cancellable_call(
     if context is None:
         if request is not None:
             context = get_context_factory().create_context(request)
+            context.cancel_token = token
         else:
-            context = Context.create()
-    context.cancel_token = token
+            # apcore >= 0.22 exposes cancel_token as a first-class Context.create()
+            # parameter, replacing the post-hoc `context.cancel_token = token` anti-pattern.
+            context = Context.create(cancel_token=token)
+    else:
+        context.cancel_token = token
 
     if timeout is None:
         timeout = get_apcore_settings().cancel_default_timeout
@@ -158,9 +162,13 @@ async def cancellable_call_async(
     if context is None:
         if request is not None:
             context = get_context_factory().create_context(request)
+            context.cancel_token = token
         else:
-            context = Context.create()
-    context.cancel_token = token
+            # apcore >= 0.22 exposes cancel_token as a first-class Context.create()
+            # parameter, replacing the post-hoc `context.cancel_token = token` anti-pattern.
+            context = Context.create(cancel_token=token)
+    else:
+        context.cancel_token = token
 
     if timeout is None:
         timeout = get_apcore_settings().cancel_default_timeout

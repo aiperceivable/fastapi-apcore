@@ -29,8 +29,10 @@ FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python)
 
 - Python >= 3.11
 - FastAPI >= 0.100
-- apcore >= 0.13.1
-- apcore-toolkit >= 0.4.0
+- apcore >= 0.25.0
+- apcore-toolkit >= 0.9.1
+- apcore-mcp >= 0.17.0 (optional, `[mcp]` extra)
+- apcore-cli >= 0.10.2 (optional, `[cli]` extra)
 
 ## Installation
 
@@ -363,6 +365,29 @@ All settings are read from environment variables with the `APCORE_` prefix:
 | `APCORE_JWT_ISSUER` | — | Expected JWT issuer claim |
 | `APCORE_ACL_PATH` | — | Path to ACL YAML rules file |
 | `APCORE_MIDDLEWARES` | — | Comma-separated middleware dotted paths |
+
+#### Access control (ACL)
+
+Set `APCORE_ACL_PATH` to a YAML rules file and apcore enforces role-based
+`allow`/`deny` on every module call. Roles come from the request's
+authenticated user: `FastAPIContextFactory` reads `request.state.user`
+(`roles` / `groups` / `scopes`) into the apcore `Identity` that ACL conditions
+match against. A denied call raises `ACLDeniedError`, which your route maps to
+HTTP 403.
+
+```yaml
+# acl.yaml
+default_effect: deny
+rules:
+  - description: Admins may call any module
+    callers: ["*"]
+    targets: ["*"]
+    effect: allow
+    conditions: { roles: ["admin"] }
+```
+
+See **[`examples/acl_demo/`](examples/acl_demo/)** for a runnable FastAPI app
+plus integration tests (`tests/test_acl_demo.py`).
 
 ### Observability
 

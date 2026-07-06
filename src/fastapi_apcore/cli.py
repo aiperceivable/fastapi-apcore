@@ -339,6 +339,8 @@ def create_cli() -> Any:
         max_age: int = typer.Option(None, "--max-age", help="Max age in seconds for completed tasks."),
     ) -> None:
         """Clean up old completed tasks."""
+        import asyncio
+
         from fastapi_apcore.engine.config import get_apcore_settings
         from fastapi_apcore.engine.tasks import get_task_manager
 
@@ -346,7 +348,8 @@ def create_cli() -> Any:
             max_age = get_apcore_settings().task_cleanup_age
 
         tm = get_task_manager()
-        count = tm.cleanup(max_age_seconds=max_age)
+        # apcore >= 0.22 made AsyncTaskManager.cleanup() a coroutine.
+        count = asyncio.run(tm.cleanup(max_age_seconds=max_age))
         typer.echo(f"Cleaned up {count} tasks.")
 
     return cli
