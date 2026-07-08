@@ -73,6 +73,7 @@ class FastAPIApcore:
         simplify_ids: bool = False,
         include: str | None = None,
         exclude: str | None = None,
+        policy_path: str | None = None,
     ) -> None:
         """Initialize fastapi-apcore with a FastAPI application.
 
@@ -117,6 +118,14 @@ class FastAPIApcore:
             from fastapi_apcore.output import get_writer
 
             scanned = self.scan(app, source=scan_source, simplify_ids=simplify_ids, include=include, exclude=exclude)
+            # Apply external governance policy (marks requires_approval /
+            # destructive) before registration so approval gating reflects the
+            # operator's decision — without modifying the target app's source.
+            effective_policy = policy_path or getattr(settings, "policy_path", None)
+            if scanned and effective_policy:
+                from fastapi_apcore.governance import apply_policy, load_policy
+
+                scanned = apply_policy(scanned, load_policy(effective_policy))
             if scanned:
                 writer = get_writer(None)  # RegistryWriter
                 writer.write(scanned, registry)

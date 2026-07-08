@@ -78,3 +78,71 @@ class TestSchemaTopydantic:
         # Omitting required field should raise
         with pytest.raises(Exception):
             model()
+
+
+def sample_handler(order_id: int) -> dict:
+    """A sample endpoint handler used as a resolvable target."""
+    return {"order_id": order_id}
+
+
+class TestAnnotationPreservation:
+    """Regression: behavioral annotations must survive registration so that
+    approval/ACL gating that keys on ``requires_approval`` can fire."""
+
+    def _scanned(self, annotations):
+        from fastapi_apcore.scanners.base import ScannedModule
+
+        return ScannedModule(
+            module_id="orders.delete_order.delete",
+            description="Delete an order.",
+            input_schema={"properties": {"order_id": {"type": "integer"}}, "required": ["order_id"]},
+            output_schema={},
+            tags=[],
+            target="tests.test_writers:sample_handler",
+            http_method="DELETE",
+            url_path="/orders/{order_id}",
+            annotations=annotations,
+        )
+
+    def test_writer_preserves_annotations_into_registry(self) -> None:
+        from apcore import ModuleAnnotations, Registry
+
+        registry = Registry()
+        mod = self._scanned(ModuleAnnotations(destructive=True, requires_approval=True))
+        FastAPIRegistryWriter().write([mod], registry)
+
+        definition = registry.get_definition("orders.delete_order.delete")
+        assert definition.annotations is not None, "annotations were dropped during registration"
+        assert definition.annotations.destructive is True
+        assert definition.annotations.requires_approval is True
+
+    def test_none_annotations_do_not_break_registration(self) -> None:
+        from apcore import Registry
+
+        registry = Registry()
+        FastAPIRegistryWriter().write([self._scanned(None)], registry)
+        assert registry.get_definition("orders.delete_order.delete") is not None
+
+
+class TestSharedConformance:
+    """Run the toolkit's shared annotation-preservation verifier against the
+    FastAPI writer — the same check django-apcore and other adapters run."""
+
+    def test_annotations_preserved_via_shared_verifier(self) -> None:
+        from apcore import ModuleAnnotations, Registry
+        from apcore_toolkit.conformance import assert_annotations_preserved
+
+        from fastapi_apcore.scanners.base import ScannedModule
+
+        mod = ScannedModule(
+            module_id="orders.delete_order",
+            description="Delete an order",
+            input_schema={"properties": {"order_id": {"type": "integer"}}, "required": ["order_id"]},
+            output_schema={},
+            tags=[],
+            target="tests.test_writers:sample_handler",
+            http_method="DELETE",
+            url_path="/orders/{order_id}",
+            annotations=ModuleAnnotations(destructive=True, requires_approval=True),
+        )
+        assert_annotations_preserved(FastAPIRegistryWriter(), mod, Registry())

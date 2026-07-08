@@ -26,11 +26,17 @@ uvicorn examples.acl_demo.app:app --reload
 ```
 
 ```bash
-curl -X DELETE localhost:8000/orders/1                     # 403  (anonymous)
-curl -X DELETE localhost:8000/orders/1 -H 'X-Roles: user'  # 403  (authenticated, not admin)
-curl -X DELETE localhost:8000/orders/1 -H 'X-Roles: admin' # 200  {"deleted": 1}
-curl localhost:8000/orders                                 # 200  (read is public)
+curl -X DELETE 127.0.0.1:8000/orders/1                     # 403  (anonymous)
+curl -X DELETE 127.0.0.1:8000/orders/1 -H 'X-Roles: user'  # 403  (authenticated, not admin)
+curl -X DELETE 127.0.0.1:8000/orders/1 -H 'X-Roles: admin' # 200  {"deleted": 1}
+curl 127.0.0.1:8000/orders                                 # 200  (read is public)
 ```
+
+> Use `127.0.0.1`, not `localhost`. On macOS `localhost` resolves to IPv6 `::1`
+> first, while `uvicorn` binds IPv4 `127.0.0.1` by default — so `curl localhost:8000`
+> can silently hit a *different* server that happens to hold IPv6 port 8000 (you'd
+> see an unexpected 404 like `Cannot DELETE /orders/1`). `127.0.0.1` forces IPv4 and
+> always reaches this app. (Or run uvicorn on another port: `--port 8001`.)
 
 > The `X-Roles` header is a demo shortcut standing in for real authentication.
 > In production, resolve the user from a JWT/session dependency and set

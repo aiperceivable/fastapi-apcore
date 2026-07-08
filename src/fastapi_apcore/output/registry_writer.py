@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from apcore_toolkit.output.registry_writer import RegistryWriter
 
 if TYPE_CHECKING:
-    from apcore import FunctionModule
     from apcore_toolkit.types import ScannedModule
 
 logger = logging.getLogger("fastapi_apcore")
@@ -36,6 +35,7 @@ class FastAPIRegistryWriter(RegistryWriter):
         dry_run: bool = False,
         verify: bool = False,
         verifiers: Any = None,
+        allowed_prefixes: list[str] | None = None,
     ) -> list[Any]:
         from apcore_toolkit.output.types import WriteResult
         from apcore_toolkit.output.verifiers import RegistryVerifier, run_verifier_chain
@@ -46,7 +46,7 @@ class FastAPIRegistryWriter(RegistryWriter):
                 results.append(WriteResult(module_id=mod.module_id))
                 continue
 
-            fm = self._to_function_module(mod)
+            fm = self._to_function_module(mod, allowed_prefixes=allowed_prefixes)
             with contextlib.suppress(KeyError, ValueError):
                 registry.unregister(mod.module_id)
             registry.register(mod.module_id, fm)
@@ -73,32 +73,21 @@ class FastAPIRegistryWriter(RegistryWriter):
             results.append(result)
         return results
 
-    def _to_function_module(self, mod: ScannedModule) -> FunctionModule:
-        from apcore import FunctionModule as FuncModule
-        from apcore_toolkit.pydantic_utils import resolve_target
+    # NOTE: this writer no longer overrides ``_to_function_module``. Doing so
+    # previously dropped ``annotations``, silently disabling approval/ACL gating
+    # (that keys on ``requires_approval``) for scanned routes. Field mapping —
+    # including annotations — is now centralized in the toolkit base writer's
+    # ``_build_function_module``; here we override only the narrow schema hooks.
 
-        func = resolve_target(mod.target)
+    def _build_input_schema(self, mod: ScannedModule) -> Any:
+        """Build an explicit input model from the scanned OpenAPI/Pydantic schema
+        so ``FunctionModule`` skips function introspection."""
+        return _schema_to_pydantic(f"{mod.module_id}_Input", mod.input_schema)
 
-        # Apply Pydantic flattening
-        try:
-            from apcore_toolkit import flatten_pydantic_params
-
-            func = flatten_pydantic_params(func)
-        except ImportError:
-            pass
-
-        input_model = _schema_to_pydantic(f"{mod.module_id}_Input", mod.input_schema)
-        output_model = _schema_to_pydantic(f"{mod.module_id}_Output", mod.output_schema)
-
-        return FuncModule(
-            func=func,
-            module_id=mod.module_id,
-            description=mod.description,
-            tags=mod.tags,
-            version=mod.version,
-            input_schema=input_model,
-            output_schema=output_model,
-        )
+    def _build_output_schema(self, mod: ScannedModule) -> Any:
+        """Build an explicit output model from the scanned schema. See
+        :meth:`_build_input_schema`."""
+        return _schema_to_pydantic(f"{mod.module_id}_Output", mod.output_schema)
 
 
 _JSON_TYPE_MAP: dict[str, type] = {

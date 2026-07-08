@@ -321,3 +321,41 @@ class TestScannerFactory:
 
         with pytest.raises(ValueError, match="Unknown scanner"):
             get_scanner("nonexistent")
+
+
+class TestScannedModuleCanonical:
+    """apcore-toolkit-python#7 item 3: fastapi's ScannedModule must extend the
+    canonical toolkit type (not fork it), so it can never drift from the shape
+    toolkit code expects (the fork dropped `examples` and crashed the toolkit's
+    own RegistryWriter)."""
+
+    def test_is_subclass_of_canonical(self) -> None:
+        from apcore_toolkit.types import ScannedModule as Canonical
+
+        from fastapi_apcore.scanners.base import ScannedModule
+
+        assert issubclass(ScannedModule, Canonical)
+
+    def test_inherits_canonical_fields_and_keeps_fastapi_fields(self) -> None:
+        from apcore_toolkit.types import ScannedModule as Canonical
+
+        from fastapi_apcore.scanners.base import ScannedModule
+
+        m = ScannedModule(
+            module_id="orders.list_orders.get",
+            description="",
+            input_schema={},
+            output_schema={},
+            tags=[],
+            target="m:f",
+            http_method="GET",
+            url_path="/orders",
+        )
+        assert isinstance(m, Canonical)
+        # canonical fields the old fork lacked are now inherited
+        assert m.examples == []
+        assert m.display is None
+        assert m.suggested_alias is None
+        # FastAPI-specific extensions remain top-level
+        assert m.http_method == "GET"
+        assert m.url_path == "/orders"

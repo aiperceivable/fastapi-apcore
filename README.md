@@ -30,9 +30,9 @@ FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python)
 - Python >= 3.11
 - FastAPI >= 0.100
 - apcore >= 0.25.0
-- apcore-toolkit >= 0.9.1
-- apcore-mcp >= 0.17.0 (optional, `[mcp]` extra)
-- apcore-cli >= 0.10.2 (optional, `[cli]` extra)
+- apcore-toolkit >= 0.10.0
+- apcore-mcp >= 0.17.1 (optional, `[mcp]` extra)
+- apcore-cli >= 0.10.3 (optional, `[cli]` extra)
 
 ## Installation
 

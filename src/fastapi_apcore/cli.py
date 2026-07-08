@@ -136,6 +136,12 @@ def create_cli() -> Any:
         tags: str = typer.Option(None, "--tags", help="Comma-separated tags filter."),
         prefix: str = typer.Option(None, "--prefix", help="Module ID prefix filter."),
         log_level: str = typer.Option(None, "--log-level", help="Log level: DEBUG, INFO, WARNING, ERROR."),
+        policy: str = typer.Option(
+            None,
+            "--policy",
+            help="Path to an external governance policy YAML (marks requires_approval / destructive "
+            "on matching modules without touching the app's source).",
+        ),
     ) -> None:
         """Start an MCP server exposing registered apcore modules as tools."""
         app = _load_app(app_path)
@@ -144,7 +150,7 @@ def create_cli() -> Any:
         from fastapi_apcore.client import FastAPIApcore
 
         apcore = FastAPIApcore.get_instance()
-        apcore.init_app(app)
+        apcore.init_app(app, policy_path=policy)
 
         from fastapi_apcore.engine.config import get_apcore_settings
         from fastapi_apcore.engine.registry import get_executor, get_registry, get_metrics_collector

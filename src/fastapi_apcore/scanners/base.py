@@ -13,49 +13,37 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from apcore import ModuleAnnotations
 from apcore_toolkit import BaseScanner as _ToolkitBaseScanner
+from apcore_toolkit.types import ScannedModule as _CanonicalScannedModule
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
 
 @dataclass
-class ScannedModule:
+class ScannedModule(_CanonicalScannedModule):
     """Result of scanning a single FastAPI endpoint.
 
-    Attributes:
-        module_id: Unique module identifier (e.g., 'task.create_task.post').
-        description: Human-readable description for tool listing.
-        input_schema: JSON Schema dict for module input.
-        output_schema: JSON Schema dict for module output.
-        tags: Categorization tags (derived from FastAPI router tags).
-        target: Callable reference in 'module.path:callable' format.
-        http_method: HTTP method (GET, POST, PUT, DELETE).
-        url_path: The FastAPI URL path string (e.g., '/task/create').
-        version: Module version string.
-        annotations: Behavioral annotations inferred from HTTP method.
-        documentation: Full docstring text for rich descriptions.
-        metadata: Arbitrary key-value data (e.g., scanner source info).
-        warnings: Non-fatal issues encountered during scanning.
+    Extends the canonical :class:`apcore_toolkit.types.ScannedModule` — every
+    shared field (``annotations``, ``examples``, ``display``,
+    ``suggested_alias``, ``metadata``, ``warnings``, ...) is **inherited**, so
+    this type can never drift from the canonical shape the way the previous
+    standalone fork did. That drift dropped ``examples`` and crashed toolkit
+    code reading ``mod.examples``; see apcore-toolkit-python#7 (item 3).
+
+    ``http_method`` / ``url_path`` are FastAPI-specific extensions kept as
+    top-level attributes for scanner ergonomics; the canonical type stores such
+    route data in ``metadata``. They default to ``""`` (required-in-practice —
+    every scanner sets them) because a dataclass subclass cannot add fields
+    without defaults after the parent's defaulted fields.
     """
 
-    module_id: str
-    description: str
-    input_schema: dict[str, Any]
-    output_schema: dict[str, Any]
-    tags: list[str]
-    target: str
-    http_method: str
-    url_path: str
-    version: str = "1.0.0"
-    annotations: ModuleAnnotations | None = None
-    documentation: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
+    http_method: str = ""
+    url_path: str = ""
 
 
 class BaseScanner(ABC):
@@ -135,9 +123,7 @@ class BaseScanner(ABC):
             if original_router is not None:
                 context = getattr(route, "include_context", None)
                 include_prefix = getattr(context, "prefix", "") or ""
-                include_tags = tuple(
-                    str(t) for t in (getattr(context, "tags", None) or ())
-                )
+                include_tags = tuple(str(t) for t in (getattr(context, "tags", None) or ()))
                 collected.extend(
                     self.collect_api_routes(
                         original_router.routes,
@@ -151,11 +137,7 @@ class BaseScanner(ABC):
             sub_routes = getattr(route, "routes", None)
             if sub_routes:
                 mount_prefix = getattr(route, "path", "") or ""
-                collected.extend(
-                    self.collect_api_routes(
-                        sub_routes, prefix + mount_prefix, extra_tags
-                    )
-                )
+                collected.extend(self.collect_api_routes(sub_routes, prefix + mount_prefix, extra_tags))
         return collected
 
     def deduplicate_ids(self, modules: list[ScannedModule]) -> list[ScannedModule]:

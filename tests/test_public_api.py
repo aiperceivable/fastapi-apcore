@@ -92,4 +92,3 @@ class TestPublicAPI:
 
         with pytest.raises(AttributeError):
             _ = fastapi_apcore.NoSuchThing  # type: ignore[attr-defined]
-
