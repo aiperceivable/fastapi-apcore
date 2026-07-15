@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.5.0] - 2026-07-08
+## [0.5.0] - 2026-07-15
 
 Dependency uplift to the aligned apcore 0.26.0 / apcore-toolkit 0.10.0 / apcore-mcp 0.17.2 / apcore-cli 0.10.3 release train and the source fixes for that range — plus reachable approval/ACL governance for scanned routes and an external, source-free governance policy. All 186 tests pass.
 
