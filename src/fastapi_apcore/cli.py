@@ -223,8 +223,11 @@ def create_cli() -> Any:
         use_executor = bool(settings.middlewares or settings.acl_path or settings.executor_config)
         registry_or_executor = get_executor() if use_executor else registry
 
-        typer.echo(f"[fastapi-apcore] Starting MCP server '{name}' via {transport}...")
-        typer.echo(f"[fastapi-apcore] {registry.count} modules registered.")
+        # Diagnostics MUST go to stderr: under the stdio transport, stdout is the
+        # MCP JSON-RPC stream and any stray text corrupts it (strict clients like
+        # Claude Desktop reject the whole stream).
+        typer.echo(f"[fastapi-apcore] Starting MCP server '{name}' via {transport}...", err=True)
+        typer.echo(f"[fastapi-apcore] {registry.count} modules registered.", err=True)
 
         try:
             from apcore_mcp import serve as mcp_serve

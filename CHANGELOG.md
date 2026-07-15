@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.5.0] - 2026-07-08
 
-Dependency uplift to the aligned apcore 0.25.0 / apcore-toolkit 0.10.0 / apcore-mcp 0.17.0 / apcore-cli 0.10.2 release train and the source fixes for that range — plus reachable approval/ACL governance for scanned routes and an external, source-free governance policy. All 186 tests pass.
+Dependency uplift to the aligned apcore 0.26.0 / apcore-toolkit 0.10.0 / apcore-mcp 0.17.2 / apcore-cli 0.10.3 release train and the source fixes for that range — plus reachable approval/ACL governance for scanned routes and an external, source-free governance policy. All 186 tests pass.
 
 ### Added
 
@@ -19,9 +19,9 @@ Dependency uplift to the aligned apcore 0.25.0 / apcore-toolkit 0.10.0 / apcore-
 
 ### Changed
 
-- Dependency floor raised: `apcore >= 0.25.0` (was `>= 0.15.1`) — picks up config-driven ACL discovery, public registry-id constants, per-instance `ToggleState`, and the unified `Context.create()` / async `AsyncTaskManager` surface.
+- Dependency floor raised: `apcore >= 0.26.0` (was `>= 0.15.1`) — picks up config-driven ACL discovery, public registry-id constants, per-instance `ToggleState`, the unified `Context.create()` / async `AsyncTaskManager` surface, and the 0.26.0 execution-time governance layer (Execution Policy §7.9, governance events, no-handler fail-loud).
 - Dependency floor raised: `apcore-toolkit >= 0.10.0` (was `>= 0.4.1`) — centralizes `RegistryWriter` field mapping behind narrow hooks and ships the shared annotation-preservation conformance verifier; the hardened OpenAPI parser (integer status-code keys, explicit `null`) improves `OpenAPIScanner` output; `format_*` surface formatters and `ConventionScanner` are available.
-- Dependency floor raised: `apcore-mcp >= 0.17.1` (was `>= 0.12.0`) — async approval Phase B (`approval_store` / `approval_notify`), `output_format`, and `observability` flow through `create_mcp_server(**serve_kwargs)` with no new code; 0.17.1 is the apcore-toolkit 0.10.0-compatible patch.
+- Dependency floor raised: `apcore-mcp >= 0.17.2` (was `>= 0.12.0`) — async approval Phase B (`approval_store` / `approval_notify`), `output_format`, and `observability` flow through `create_mcp_server(**serve_kwargs)` with no new code; 0.17.2 adds the elicitation approval fix (sends a non-empty renderable boolean schema so form-rendering clients like Claude Code render the approve/deny control instead of failing closed).
 - Dependency floor raised: `apcore-cli >= 0.10.3` (was `>= 0.5.0`) — the apcore-toolkit 0.10.0-compatible patch.
 - **`FastAPIRegistryWriter` no longer overrides `_to_function_module`** (that override was
   how annotations got dropped). It now overrides only the toolkit base writer's narrow
@@ -40,6 +40,7 @@ Dependency uplift to the aligned apcore 0.25.0 / apcore-toolkit 0.10.0 / apcore-
 
 ### Fixed
 
+- **`serve` corrupted the stdio MCP stream** — the startup diagnostics (`[fastapi-apcore] Starting MCP server ...` / `... modules registered`) were written to stdout via `typer.echo`, but under the `stdio` transport stdout **is** the MCP JSON-RPC stream. Strict clients (e.g. Claude Desktop) rejected the whole connection with `Unexpected token 's', "[fastapi-apco"... is not valid JSON`. These diagnostics now go to stderr.
 - **Behavioral annotations were dropped during registration** — `FastAPIRegistryWriter` built its `FunctionModule` without passing `annotations` (also `documentation` / `metadata` / `display`), so every `registry.get_definition(...).annotations` came back `None`. Approval/ACL gating keys on `requires_approval` (e.g. `serve --approval elicit`), so gating **silently never fired for scanned FastAPI routes**.
 - **`create_cli()` broke against apcore-cli >= 0.9** — `register_shell_commands` was removed from `apcore_cli.shell` (dead-code cleanup). `create_cli()` raised `ImportError` at runtime and aborted before returning a Click group. Switched to `register_completion_command` (the surviving public helper); `configure_man_help` — already called separately — continues to provide `--help --man`.
 - **`fastapi-apcore tasks cleanup` never cleaned up against apcore >= 0.22** — `AsyncTaskManager.cleanup()` became a coroutine, but the CLI called it synchronously and echoed the un-awaited coroutine object as the count. Now driven via `asyncio.run(tm.cleanup(...))`.
