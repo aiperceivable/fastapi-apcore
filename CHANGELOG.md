@@ -13,6 +13,7 @@ Dependency uplift to the aligned apcore 0.32.2 / apcore-toolkit 0.14.1 / apcore-
 - A segment that is still illegal after normalisation (`POST /v1/2fa` -> `v1.2fa.post`) is not repaired, because that would invent a name; it is emitted with a pinned warning in `ScannedModule.warnings`.
 - `ScannedModule.suggested_alias` (the canonical top-level field) is now populated alongside the legacy `metadata["suggested_alias"]` when `simplify_ids=True`, so `DisplayResolver` uses the preferred source.
 - `BaseScanner.deduplicate_ids` now delegates to `apcore-toolkit`'s canonical implementation: generated suffixes never collide with an existing ID, and a rename is recorded in `warnings`.
+- **CI: the ruff rule set is pinned explicitly** (`[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]`), matching the other apcore Python SDKs. Ruff 0.16+ widened its implicit default selection, so an unpinned `ruff>=0.1` in CI began reporting isort/bugbear/simplify/bleach findings on code an older local ruff had passed.
 
 ### Notes
 
