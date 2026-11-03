@@ -72,6 +72,9 @@ class NativeFastAPIScanner(BaseScanner):
                 warnings: list[str] = []
                 if not input_schema.get("properties"):
                     warnings.append(f"Route '{method} {full_path}' has no input parameters")
+                module_id_warning = self.module_id_warning(module_id)
+                if module_id_warning is not None:
+                    warnings.append(module_id_warning)
 
                 modules.append(
                     ScannedModule(
@@ -117,7 +120,7 @@ class NativeFastAPIScanner(BaseScanner):
             prefix = ".".join(path_parts) if path_parts else "root"
             module_id = f"{prefix}.{func_name}.{method.lower()}"
 
-        return re.sub(r"[^a-zA-Z0-9._]", "_", module_id)
+        return self.canonicalize_module_id(module_id)
 
     def _extract_description(self, endpoint: Callable[..., Any], route: APIRoute, path: str, method: str) -> str:
         """Extract description from route summary, docstring, or auto-generate."""

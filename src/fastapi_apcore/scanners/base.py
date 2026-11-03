@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from apcore import ModuleAnnotations
@@ -22,6 +22,17 @@ from apcore_toolkit.types import ScannedModule as _CanonicalScannedModule
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+
+
+# Module-ID normalisation mirrors apcore-toolkit's OpenAPI scanner
+# (``apcore-toolkit >= 0.13.0``): split camelCase/acronyms into words, replace
+# characters outside the Canonical ID alphabet, lowercase, and strip leading
+# underscores per dot-separated segment. An ID apcore already accepts
+# (PROTOCOL_SPEC §2.7) is returned unchanged.
+_ACRONYM_BOUNDARY_RE = re.compile(r"([A-Z])([A-Z][a-z])")
+_WORD_BOUNDARY_RE = re.compile(r"([a-z0-9])([A-Z])")
+_OUTSIDE_ID_ALPHABET_RE = re.compile(r"[^A-Za-z0-9_.]")
+_LEGAL_SEGMENT_RE = re.compile(r"[a-z][a-z0-9_]*")
 
 
 @dataclass
@@ -141,15 +152,51 @@ class BaseScanner(ABC):
         return collected
 
     def deduplicate_ids(self, modules: list[ScannedModule]) -> list[ScannedModule]:
-        """Resolve duplicate module IDs by appending _2, _3, etc."""
-        seen: dict[str, int] = {}
-        result: list[ScannedModule] = []
-        for module in modules:
-            mid = module.module_id
-            if mid in seen:
-                seen[mid] += 1
-                result.append(replace(module, module_id=f"{mid}_{seen[mid]}"))
-            else:
-                seen[mid] = 1
-                result.append(module)
+        """Resolve duplicate module IDs by appending _2, _3, etc.
+
+        Delegates to the canonical toolkit implementation, which pre-scans
+        existing IDs so a generated suffix never collides with an ID that is
+        already present, and records the rename in ``warnings``.
+        """
+        result: list[ScannedModule] = _ToolkitBaseScanner.deduplicate_ids(self, modules)
         return result
+
+    @staticmethod
+    def canonicalize_module_id(candidate: str) -> str:
+        """Normalise a generated module ID into apcore's Canonical ID alphabet.
+
+        Framework scanners compose IDs from tags, function names and path
+        segments, which may carry camelCase (``getUser``) or punctuation
+        (``user-profiles``). apcore's registry only accepts
+        ``^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$`` (PROTOCOL_SPEC §2.7), so
+        such IDs were previously rejected at registration time.
+
+        The algorithm is byte-identical to apcore-toolkit's OpenAPI scanner:
+        split acronym and word boundaries, replace characters outside
+        ``[A-Za-z0-9_.]`` with ``_``, lowercase, then strip leading
+        underscores from each dot-separated segment and drop empty segments.
+        An already-legal ID is returned unchanged (runs of ``_`` are kept,
+        so FastAPI's ``read_item_items__item_id__get`` registers as before).
+        """
+        candidate = _ACRONYM_BOUNDARY_RE.sub(r"\1_\2", candidate)
+        candidate = _WORD_BOUNDARY_RE.sub(r"\1_\2", candidate)
+        candidate = _OUTSIDE_ID_ALPHABET_RE.sub("_", candidate)
+        candidate = candidate.lower()
+        segments = (seg.lstrip("_") for seg in candidate.split("."))
+        return ".".join(seg for seg in segments if seg)
+
+    @staticmethod
+    def module_id_warning(module_id: str) -> str | None:
+        """Return a warning if *module_id* is not a legal apcore ID.
+
+        A segment that still begins with a digit (``/v1/2fa``) is not
+        repaired, because that would invent a name; the module is emitted
+        with this warning so the caller can rename it via a binding.
+        """
+        for segment in module_id.split("."):
+            if _LEGAL_SEGMENT_RE.fullmatch(segment) is None:
+                return (
+                    f"module_id '{module_id}' is not a legal apcore module ID: segment '{segment}' "
+                    "must match ^[a-z][a-z0-9_]*$; rename it with a binding display.alias"
+                )
+        return None

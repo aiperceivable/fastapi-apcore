@@ -31,6 +31,14 @@ def fake_db():
     return None
 
 
+def getUser():  # camelCase on purpose: FastAPI IDs derive from this name
+    return []
+
+
+def listUserProfiles():  # camelCase on purpose: FastAPI IDs derive from this name
+    return []
+
+
 def build_test_app() -> FastAPI:
     """Build a minimal FastAPI app for testing."""
     app = FastAPI(title="Test API")
@@ -292,6 +300,8 @@ class TestOpenAPIScannerSimplifyIds:
         modules = scanner.scan(app)
         for m in modules:
             assert "suggested_alias" in m.metadata, f"Missing suggested_alias for {m.module_id}"
+            # Canonical top-level field (preferred by DisplayResolver).
+            assert m.suggested_alias == m.metadata["suggested_alias"]
 
 
 # -- get_scanner factory -----------------------------------------------------
@@ -359,3 +369,65 @@ class TestScannedModuleCanonical:
         # FastAPI-specific extensions remain top-level
         assert m.http_method == "GET"
         assert m.url_path == "/orders"
+
+
+class TestCanonicalModuleIds:
+    """apcore-toolkit 0.13.0 made the OpenAPI scanner emit Canonical IDs.
+    FastAPI scanners derive IDs from tags/function names/path segments, so a
+    camelCase function name or hyphenated tag previously produced an ID that
+    apcore's registry rejected at registration time."""
+
+    @staticmethod
+    def build_app() -> FastAPI:
+        app = FastAPI()
+        app.get("/users", tags=["users"])(getUser)
+        app.get("/user-profiles", tags=["user-profiles"])(listUserProfiles)
+        return app
+
+    def test_openapi_scanner_normalizes_camel_case(self) -> None:
+        modules = OpenAPIScanner().scan(self.build_app())
+        ids = {m.module_id for m in modules}
+
+        assert "users.get_user_users.get" in ids
+        assert any(not mid.startswith("user-profiles") and "list_user_profiles" in mid for mid in ids)
+
+    def test_native_scanner_normalizes_camel_case(self) -> None:
+        modules = NativeFastAPIScanner().scan(self.build_app())
+        ids = {m.module_id for m in modules}
+
+        assert "users.get_user.get" in ids
+        assert "user_profiles.list_user_profiles.get" in ids
+
+    def test_legal_ids_are_unchanged(self, app: FastAPI) -> None:
+        modules = OpenAPIScanner().scan(app)
+        ids = {m.module_id for m in modules}
+
+        # FastAPI's native snake_case operationIds keep their `__` runs.
+        assert "items.get_item_items__item_id_.get" in ids
+        assert "items.list_items_items.get" in ids
+
+    def test_generated_ids_register(self) -> None:
+        from apcore import Registry
+
+        from fastapi_apcore.output import get_writer
+
+        modules = OpenAPIScanner().scan(self.build_app())
+        registry = Registry()
+        writer = get_writer(None)
+        writer.write(modules, registry)
+
+        assert "users.get_user_users.get" in registry.list()
+
+    def test_illegal_segment_is_warned_not_repaired(self) -> None:
+        app = FastAPI()
+
+        @app.get("/v1/2fa")
+        def two_factor():
+            return []
+
+        modules = NativeFastAPIScanner().scan(app)
+        module = next(m for m in modules if "2fa" in m.module_id)
+
+        # Not repaired (that would invent a name) — surfaced instead.
+        assert module.module_id.startswith("v1.2fa.")
+        assert any("not a legal apcore module ID" in w for w in module.warnings)

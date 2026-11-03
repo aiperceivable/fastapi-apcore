@@ -99,6 +99,7 @@ class OpenAPIScanner(BaseScanner):
                     continue
 
                 module_id = self._generate_module_id(operation, path, method_upper)
+                warnings = [w for w in (self.module_id_warning(module_id),) if w is not None]
                 description = (
                     operation.get("summary")
                     or operation.get("description", "").split("\n")[0].strip()
@@ -124,15 +125,18 @@ class OpenAPIScanner(BaseScanner):
                         url_path=path,
                         annotations=annotations,
                         documentation=documentation,
+                        # suggested_alias is set when simplify_ids=True so that
+                        # DisplayResolver can use it as a fallback alias without
+                        # the module_id being modified (§5.13.7). The canonical
+                        # top-level field is preferred; the metadata copy is
+                        # retained for callers written against the old shape.
+                        suggested_alias=module_id if self._simplify_ids else None,
                         metadata={
                             "source": "openapi",
                             "operation_id": operation_id,
-                            # suggested_alias is set when simplify_ids=True so that
-                            # DisplayResolver can use it as a fallback alias without
-                            # the module_id being modified (§5.13.7).
                             **({"suggested_alias": module_id} if self._simplify_ids else {}),
                         },
-                        warnings=[],
+                        warnings=warnings,
                     )
                 )
 
@@ -176,8 +180,7 @@ class OpenAPIScanner(BaseScanner):
             path_parts = [p for p in path.strip("/").split("/") if not p.startswith("{")]
             prefix = ".".join(path_parts) if path_parts else "root"
 
-        module_id = f"{prefix}.{func_name}.{method.lower()}"
-        return re.sub(r"[^a-zA-Z0-9._]", "_", module_id)
+        return self.canonicalize_module_id(f"{prefix}.{func_name}.{method.lower()}")
 
     @staticmethod
     def _strip_method_suffix(operation_id: str, method: str) -> str:

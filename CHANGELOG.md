@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-11-03
+
+Dependency uplift to the aligned apcore 0.32.2 / apcore-toolkit 0.14.1 / apcore-mcp 0.23.3 / apcore-cli 0.12.6 release train, plus adoption of the toolkit's Canonical module-ID rules in the FastAPI scanners. All 191 tests pass.
+
+### Changed
+
+- Dependency floors raised: `apcore >= 0.32.2` (was `>= 0.26.0`), `apcore-toolkit >= 0.14.1` (was `>= 0.10.0`), `apcore-mcp >= 0.23.3` (was `>= 0.17.2`), `apcore-cli >= 0.12.6` (was `>= 0.10.3`). `apcore-toolkit` 0.14.x requires apcore 0.32, so the core floor moved with it.
+- **Both scanners now emit Canonical module IDs** (`NativeFastAPIScanner`, `OpenAPIScanner`). apcore-toolkit 0.13.0 established the ecosystem-wide rule that OpenAPI-derived IDs must match apcore's Canonical ID alphabet (`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`, PROTOCOL_SPEC §2.7). The FastAPI scanners build IDs from tags, function names and path segments, so a camelCase function (`getUser` -> `users.getUser_users.get`) or a hyphenated tag produced an ID the registry rejected with `INVALID_MODULE_ID` at registration time. IDs are now normalised through the same word-boundary/case rules the toolkit uses (`users.get_user_users.get`). **Migration:** only IDs containing uppercase letters change meaning; an ID apcore already accepted — including FastAPI's `__` runs such as `items.get_item_items__item_id_.get` — is returned unchanged. `include` / `exclude` patterns match the emitted, normalised ID.
+- A segment that is still illegal after normalisation (`POST /v1/2fa` -> `v1.2fa.post`) is not repaired, because that would invent a name; it is emitted with a pinned warning in `ScannedModule.warnings`.
+- `ScannedModule.suggested_alias` (the canonical top-level field) is now populated alongside the legacy `metadata["suggested_alias"]` when `simplify_ids=True`, so `DisplayResolver` uses the preferred source.
+- `BaseScanner.deduplicate_ids` now delegates to `apcore-toolkit`'s canonical implementation: generated suffixes never collide with an existing ID, and a rename is recorded in `warnings`.
+
+### Notes
+
+- `apcore-a2a` 0.8.5 is not a dependency of this integration (no A2A serving surface is exposed here), so no change was needed for it.
+- No code change was needed for apcore-mcp's stdio stdout-isolation rework, the stricter apcore-toolkit 0.14.0 binding validation, or the apcore 0.27-0.32 execution/ACL/redaction changes — the existing integration already uses the compatible public surfaces.
+
 ## [0.5.0] - 2026-07-15
 
 Dependency uplift to the aligned apcore 0.26.0 / apcore-toolkit 0.10.0 / apcore-mcp 0.17.2 / apcore-cli 0.10.3 release train and the source fixes for that range — plus reachable approval/ACL governance for scanned routes and an external, source-free governance policy. All 186 tests pass.
