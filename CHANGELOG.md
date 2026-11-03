@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.6.0] - 2026-11-03
+## [0.5.1] - 2026-11-03
 
 Dependency uplift to the aligned apcore 0.32.2 / apcore-toolkit 0.14.1 / apcore-mcp 0.23.3 / apcore-cli 0.12.6 release train, plus adoption of the toolkit's Canonical module-ID rules in the FastAPI scanners. All 191 tests pass.
 
