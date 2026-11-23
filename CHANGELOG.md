@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-11-23
+
+Dependency uplift to the aligned apcore 0.33.0 / apcore-toolkit 0.15.0 /
+apcore-mcp 0.23.4 / apcore-cli 0.14.1 release train, plus HTTP proxy preflight
+for generated CLIs. All 196 tests pass.
+
+### Added
+
+- **`create_cli()` proxy preflight (`validate_proxy=True` by default).** The
+  CLI generator now runs the OpenAPI document through apcore-toolkit 0.15.0's
+  effective-parameter scanner, copies the matching operation's
+  `input_schema` and `metadata.openapi.proxy_inputs` onto the scanned module,
+  and calls `validate_effective_proxy_modules()` before registering anything.
+  Operations that cannot be forwarded losslessly — a query parameter on a
+  JSON-body method, body properties on a query method, a path-template
+  mismatch, conflicting path/query/body names, or an unsupported request body
+  — raise `ValueError` naming every offending module. Inherited Path Item
+  parameters and same-document parameter `$ref`s now reach the CLI input
+  schema instead of being silently ignored. Pass `validate_proxy=False` to
+  keep the legacy best-effort proxy. Native scanning skips the check because
+  it has no OpenAPI document to resolve against.
+
+### Changed
+
+- Dependency floors raised: `apcore >= 0.33.0` (was `>= 0.32.2`),
+  `apcore-toolkit >= 0.15.0` (was `>= 0.14.1`), `apcore-mcp >= 0.23.4`
+  (was `>= 0.23.3`), and `apcore-cli >= 0.14.1` (was `>= 0.12.6`). The README
+  requirements list now names the same versions.
+- **Binding-declared `resources` survive Pydantic flattening during discovery.**
+  apcore 0.33.0 added a first-class `resources` block (including the per-module
+  `timeout` budget), and binding files accept it. `FastAPIDiscoverer` rebuilds
+  a discovered `FunctionModule` when a module has Pydantic model parameters;
+  the rebuilt module now forwards `resources` instead of silently dropping the
+  declared budget and falling back to `executor.default_timeout`. The rebuild
+  also preserves `documentation`, `annotations`, `metadata`, `display` and
+  `examples`, which it previously dropped — notably annotations such as
+  `requires_approval`.
+
+### Notes
+
+- The effective scan is a sidecar used only by `create_cli()`; `scan()`,
+  `serve()`, `export` and the scanners themselves keep their existing
+  framework-specific OpenAPI path and schema output. apcore-cli 0.14.x's
+  embedded-host error hooks and apcore-mcp 0.23.4's standalone backend changes
+  do not alter the APIs this integration calls.
+
 ## [0.5.1] - 2026-11-03
 
 Dependency uplift to the aligned apcore 0.32.2 / apcore-toolkit 0.14.1 / apcore-mcp 0.23.3 / apcore-cli 0.12.6 release train, plus adoption of the toolkit's Canonical module-ID rules in the FastAPI scanners. All 191 tests pass.

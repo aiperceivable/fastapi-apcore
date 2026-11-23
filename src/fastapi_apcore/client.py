@@ -603,6 +603,7 @@ class FastAPIApcore:
         max_content_width: int | None = None,
         docs_url: str | None = None,
         verbose_help: bool = False,
+        validate_proxy: bool = True,
     ) -> Any:
         """Create an apcore-cli Click group with all API routes as commands.
 
@@ -643,6 +644,13 @@ class FastAPIApcore:
                 (``--input``, ``--yes``, ``--large-input``, ``--format``) in
                 ``--help`` output. Defaults to ``False`` (hidden). Users can
                 also toggle this at runtime with the ``--verbose`` flag.
+            validate_proxy: When ``True`` (default) and ``scan_source="openapi"``,
+                resolve inherited OpenAPI parameters through apcore-toolkit's
+                effective-parameter scanner and refuse to register operations
+                that cannot be forwarded losslessly (for example a query
+                parameter on a JSON-body method). Set ``False`` to keep the
+                legacy best-effort proxy. Native scanning skips this check
+                because it has no OpenAPI document to resolve against.
 
         Returns:
             A Click Group that can be invoked with ``cli(standalone_mode=True)``.
@@ -704,6 +712,27 @@ class FastAPIApcore:
             from apcore_toolkit.display import DisplayResolver
 
             modules = DisplayResolver().resolve(modules, binding_path=binding_path)
+
+        # 1c. Resolve effective OpenAPI inputs and reject operations the HTTP
+        # proxy cannot forward losslessly. The writer switches to effective
+        # forwarding only when ``proxy_inputs`` metadata is present.
+        if validate_proxy and scan_source == "openapi" and modules:
+            from apcore_toolkit import validate_effective_proxy_modules
+
+            from fastapi_apcore.scanners.openapi import apply_effective_proxy_inputs
+
+            spec = app.openapi()
+            if not isinstance(spec, dict):
+                logger.warning(
+                    "create_cli: app.openapi() did not return an OpenAPI document; "
+                    "skipping proxy preflight"
+                )
+            else:
+                modules = apply_effective_proxy_inputs(modules, spec)
+                try:
+                    validate_effective_proxy_modules(modules)
+                except ValueError as exc:
+                    raise ValueError(f"create_cli() proxy preflight failed: {exc}") from exc
 
         # 2. Register as HTTP proxy modules
         registry = Registry()

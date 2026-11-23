@@ -176,3 +176,49 @@ class TestImportAndInstantiate:
     def test_import_and_instantiate_bad_class(self):
         result = _import_and_instantiate("collections.NoSuchClass")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# FastAPIDiscoverer._adapt_module — rebuild fidelity
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptModuleResources:
+    """Rebuilding a flattened module must keep its metadata and resources."""
+
+    def test_resources_survive_pydantic_flattening(self):
+        from apcore import FunctionModule, ModuleExample
+        from pydantic import BaseModel
+
+        class Filters(BaseModel):
+            q: str = ""
+
+        def search(filters) -> str:
+            return filters.q
+
+        # Set the annotation to the class object so ``typing.get_type_hints``
+        # can resolve it despite the nested definition.
+        search.__annotations__["filters"] = Filters
+
+        fm = FunctionModule(
+            func=search,
+            module_id="test.search",
+            description="Search",
+            documentation="Search docs",
+            tags=["search"],
+            annotations={"requires_approval": True},
+            metadata={"source": "binding"},
+            display={"alias": "search"},
+            examples=[ModuleExample(title="demo", inputs={"q": "x"})],
+            resources={"timeout": 1500},
+        )
+        adapted = FastAPIDiscoverer._adapt_module(fm, FunctionModule)
+
+        assert adapted is not fm
+        assert adapted.resources == {"timeout": 1500}
+        assert adapted.documentation == "Search docs"
+        assert adapted.annotations is not None
+        assert adapted.annotations.requires_approval is True
+        assert adapted.metadata == {"source": "binding"}
+        assert adapted.display == {"alias": "search"}
+        assert adapted.examples == [ModuleExample(title="demo", inputs={"q": "x"})]

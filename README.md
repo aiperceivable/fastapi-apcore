@@ -29,10 +29,10 @@ FastAPI integration for [apcore](https://github.com/aiperceivable/apcore-python)
 
 - Python >= 3.11
 - FastAPI >= 0.100
-- apcore >= 0.32.2
-- apcore-toolkit >= 0.14.1
-- apcore-mcp >= 0.23.3 (optional, `[mcp]` extra)
-- apcore-cli >= 0.12.6 (optional, `[cli]` extra)
+- apcore >= 0.33.0
+- apcore-toolkit >= 0.15.0
+- apcore-mcp >= 0.23.4 (optional, `[mcp]` extra)
+- apcore-cli >= 0.14.1 (optional, `[cli]` extra)
 
 ## Installation
 
@@ -302,6 +302,8 @@ if __name__ == "__main__":
 ```
 
 Each scanned route becomes a CLI command named after `display.cli.alias` from the binding overlay (or the module_id if no overlay is set). The commands forward HTTP requests to the running API using `HTTPProxyRegistryWriter`. Built-in subcommands include `list`, `describe`, `completion`, and `man`.
+
+`create_cli()` runs a proxy preflight by default (`validate_proxy=True`). It resolves inherited and referenced OpenAPI parameters through apcore-toolkit's effective-parameter scanner, then refuses to register any operation the HTTP proxy cannot forward losslessly — for example a query parameter on a JSON-body `POST`, a body on a query-method route, or conflicting path/query/body names. The error names every offending module. Pass `validate_proxy=False` to keep the legacy best-effort behaviour. Native scanning (`scan_source="native"`) skips this check because it has no OpenAPI document to resolve against.
 
 `commands_dir` points to a directory of plain Python function files. When set, `ConventionScanner` from `apcore-toolkit` scans for public functions and registers them as additional modules alongside the scanned API routes (§5.14).
 

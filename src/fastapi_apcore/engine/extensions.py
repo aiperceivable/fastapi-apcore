@@ -80,10 +80,18 @@ class FastAPIDiscoverer:
                     func=flattened,
                     module_id=fm.module_id,
                     description=fm.description,
+                    documentation=getattr(fm, "documentation", None),
                     tags=fm.tags,
                     version=fm.version,
+                    annotations=getattr(fm, "annotations", None),
+                    metadata=getattr(fm, "metadata", None),
+                    display=getattr(fm, "display", None),
+                    examples=getattr(fm, "examples", None),
                     input_schema=fm.input_schema,
                     output_schema=fm.output_schema,
+                    # apcore 0.33.0 added resources (e.g. a per-module
+                    # timeout); rebuilding the module must not drop it.
+                    resources=getattr(fm, "resources", None),
                 )
         except (ImportError, AttributeError):
             pass
